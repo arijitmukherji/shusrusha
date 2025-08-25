@@ -3,9 +3,9 @@ from typing import TypedDict, List, Dict, Any
 import openai
 import base64
 import os
+import json
 import requests
 from urllib.parse import quote
-import json
 
 # Define the state structure
 class GraphState(TypedDict):
@@ -16,364 +16,41 @@ class GraphState(TypedDict):
     fixed_medications: Dict[str, Any]
     html_summary: str
 
-def duckduckgo_search_results(query: str, max_results: int = 10) -> List[Dict[str, str]]:
-    """
-    Perform a DuckDuckGo search and return results as a list of dictionaries.
-    
-    Args:
-        query: Search query string
-        max_results: Maximum number of results to return (default: 10)
-        
-    Returns:
-        List of dictionaries with 'title', 'url', 'snippet' keys
-    """
-    try:
-        from ddgs import DDGS
-        
-        with DDGS() as ddgs:
-            raw_results = list(ddgs.text(query, max_results=max_results))
-            
-        # Format results
-        formatted_results = []
-        for result in raw_results:
-            formatted_results.append({
-                'title': result['title'],
-                'url': result['href'],
-                'snippet': result['body']
-            })
-            
-        return formatted_results
-        
-    except ImportError:
-        print("Error: ddgs package not installed.")
-        return []
-        
-    except Exception as e:
-        print(f"Search error: {str(e)}")
-        return []
-
-def duckduckgo_search(query: str, max_results: int = 10) -> None:
-    """
-    Perform a DuckDuckGo search for a given term and print the top results.
-    
-    Args:
-        query: Search query string
-        max_results: Maximum number of results to display (default: 10)
-    """
-    try:
-        from ddgs import DDGS
-        
-        print(f"Searching for: '{query}'")
-        print("=" * 80)
-        
-        with DDGS() as ddgs:
-            results = list(ddgs.text(query, max_results=max_results))
-            
-        if not results:
-            print("No results found.")
-            return
-            
-        for i, result in enumerate(results, 1):
-            print(f"{i}. {result['title']}")
-            print(f"   URL: {result['href']}")
-            print(f"   Snippet: {result['body'][:200]}{'...' if len(result['body']) > 200 else ''}")
-            print("-" * 80)
-            
-    except ImportError:
-        print("Error: ddgs package not installed.")
-        print("Please install it with: pip install ddgs")
-        
-    except Exception as e:
-        print(f"Search error: {str(e)}")
-
-def web_search_tool(query: str, site: str = None) -> str:
-    """
-    Perform a web search using a search API or web scraping.
-    
-    Args:
-        query: Search query
-        site: Optional site to search within (e.g., "1mg.com")
-    
-    Returns:
-        Search results as a string
-    """
-    try:
-        # Use DDGS search (no API key required)
-        from ddgs import DDGS
-        
-        search_query = f"site:{site} {query}" if site else query
-        
-        with DDGS() as ddgs:
-            results = list(ddgs.text(search_query, max_results=3))
-            
-        formatted_results = []
-        for result in results:
-            formatted_results.append(f"Title: {result['title']}\nURL: {result['href']}\nSnippet: {result['body']}\n")
-        
-        return "\n".join(formatted_results)
-        
-    except ImportError:
-        # Fallback: construct search URLs manually
-        encoded_query = quote(query)
-        if site:
-            search_urls = {
-                "1mg.com": f"https://www.1mg.com",
-                "pharmeasy.in": f"https://pharmeasy.in",
-                "medindia.net": f"https://www.medindia.net",
-                "mims.com": f"https://www.mims.com/india/"
-            }
-            return f"Search URL for {site}: {search_urls.get(site, f'https://www.google.com/search?q=site:{site}+{encoded_query}')}"
-        else:
-            return f"Search URL: https://www.google.com/search?q={encoded_query}"
-    
-    except Exception as e:
-        return f"Search error: {str(e)}"
-
-def get_openai_params(model: str, messages: list, max_tokens: int = 2048, temperature: float = 0.1, use_json_format: bool = True, tools: list = None) -> dict:
+def get_openai_params(model: str, messages: list, max_tokens: int = 2048, temperature: float = 0.1, use_json_format: bool = True) -> dict:
     """
     Get the correct OpenAI API parameters based on the model type.
-    
-    Args:
-        model: The OpenAI model name
-        messages: List of messages for the API call
-        max_tokens: Maximum tokens to generate
-        temperature: Temperature for generation
-        use_json_format: Whether to use JSON response format
-        tools: List of tools for function calling
-    
-    Returns:
-        Dictionary of API parameters
     """
     base_params = {
         "model": model,
         "messages": messages
     }
     
-    # Add tools if provided and model supports them
-    if tools and not (model.startswith("o1") or model.startswith("o3")):
-        base_params["tools"] = tools
-        base_params["tool_choice"] = "auto"
-    
     # Handle different model families
     if model.startswith("gpt-5") or model.startswith("o1") or model.startswith("o3"):
         # For GPT-5, o1, and o3 models, use max_completion_tokens
         base_params["max_completion_tokens"] = max_tokens
         
-        # o1 and o3 models don't support response_format, temperature, or tools
+        # o1 and o3 models don't support response_format, temperature
         if model.startswith("o1") or model.startswith("o3"):
-            # o1/o3 models: no temperature, no tools, no response_format
-            if "tools" in base_params:
-                base_params.pop("tools")
-            if "tool_choice" in base_params:
-                base_params.pop("tool_choice")
+            pass  # No additional params for o1/o3
         elif model.startswith("gpt-5"):
-            # GPT-5 models: only support temperature=1 (default), support tools and response_format
-            base_params["temperature"] = 1  # Force temperature to 1 for GPT-5
+            # GPT-5 models: only support temperature=1 (default)
+            base_params["temperature"] = 1
             if use_json_format:
                 base_params["response_format"] = {"type": "json_object"}
     else:
         # For GPT-4 and older models, use max_tokens
         base_params["max_tokens"] = max_tokens
-        base_params["temperature"] = temperature  # Use custom temperature for older models
-        if use_json_format and not tools:  # Don't use JSON format with tools
+        base_params["temperature"] = temperature
+        if use_json_format:
             base_params["response_format"] = {"type": "json_object"}
     
     return base_params
 
-# Define web search tools for OpenAI function calling
-web_search_tools = [
-    {
-        "type": "function",
-        "function": {
-            "name": "search_drug_database",
-            "description": "Search Indian pharmaceutical databases for drug information",
-            "parameters": {
-                "type": "object",
-                "properties": {
-                    "drug_name": {
-                        "type": "string",
-                        "description": "The name of the drug to search for"
-                    },
-                    "site": {
-                        "type": "string",
-                        "enum": ["1mg.com", "pharmeasy.in", "medindia.net", "mims.com"],
-                        "description": "Which Indian pharmacy site to search"
-                    }
-                },
-                "required": ["drug_name", "site"]
-            }
-        }
-    }
-]
-
-def handle_tool_calls(tool_calls):
-    """Handle tool calls from OpenAI API response"""
-    results = []
-    for tool_call in tool_calls:
-        if tool_call.function.name == "search_drug_database":
-            args = json.loads(tool_call.function.arguments)
-            search_result = web_search_tool(args["drug_name"], args["site"])
-            results.append({
-                "tool_call_id": tool_call.id,
-                "role": "tool",
-                "content": search_result
-            })
-    return results
-
-def fetch_url_content(url: str, timeout: int = 10) -> str:
-    """
-    Fetch the content of a URL and return the text.
-    
-    Args:
-        url: The URL to fetch
-        timeout: Request timeout in seconds (default: 10)
-    
-    Returns:
-        The text content of the webpage
-    """
-    try:
-        from bs4 import BeautifulSoup
-        
-        # Set headers to mimic a real browser
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36'
-        }
-        
-        # Make the request
-        response = requests.get(url, headers=headers, timeout=timeout)
-        response.raise_for_status()  # Raise an exception for bad status codes
-        
-        # Parse the HTML content
-        soup = BeautifulSoup(response.content, 'html.parser')
-        
-        # Remove script and style elements
-        for script in soup(["script", "style"]):
-            script.decompose()
-        
-        # Get text content
-        text = soup.get_text()
-        
-        # Clean up the text
-        lines = (line.strip() for line in text.splitlines())
-        chunks = (phrase.strip() for line in lines for phrase in line.split("  "))
-        text = ' '.join(chunk for chunk in chunks if chunk)
-        
-        # Limit text length to avoid token limits
-        max_length = 5000
-        if len(text) > max_length:
-            text = text[:max_length] + "..."
-        
-        return text
-        
-    except ImportError:
-        return f"Error: BeautifulSoup not installed. Please install with: pip install beautifulsoup4"
-    
-    except requests.exceptions.RequestException as e:
-        return f"Error fetching URL {url}: {str(e)}"
-    
-    except Exception as e:
-        return f"Error processing content from {url}: {str(e)}"
-
-def fetch_url_content_simple(url: str, timeout: int = 10) -> str:
-    """
-    Simple version that fetches raw HTML content with better error handling.
-    
-    Args:
-        url: The URL to fetch
-        timeout: Request timeout in seconds (default: 10)
-    
-    Returns:
-        The raw HTML content
-    """
-    try:
-        # Better headers to avoid being blocked
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-            'Upgrade-Insecure-Requests': '1',
-        }
-        
-        print(f"Attempting to fetch: {url}")
-        
-        # Add session for better handling
-        session = requests.Session()
-        session.headers.update(headers)
-        
-        response = session.get(url, timeout=timeout, allow_redirects=True)
-        
-        print(f"Response status: {response.status_code}")
-        print(f"Response headers: {dict(response.headers)}")
-        
-        response.raise_for_status()
-        
-        # Check content type
-        content_type = response.headers.get('content-type', '')
-        print(f"Content type: {content_type}")
-        
-        # Get content
-        content = response.text
-        print(f"Content length: {len(content)} characters")
-        
-        # Limit content length
-        max_length = 20000  # Increased limit
-        if len(content) > max_length:
-            content = content[:max_length] + "... [content truncated]"
-            
-        return content
-        
-    except requests.exceptions.Timeout:
-        return f"Error: Timeout fetching {url} after {timeout} seconds"
-    except requests.exceptions.ConnectionError:
-        return f"Error: Connection failed for {url}"
-    except requests.exceptions.HTTPError as e:
-        return f"Error: HTTP {e.response.status_code} for {url}"
-    except Exception as e:
-        return f"Error fetching {url}: {str(e)}"
-
-def test_pharmeasy_fetch(medicine_name: str = "paracetamol"):
-    """
-    Test function to debug Pharmeasy fetching.
-    """
-    # Test different URL encoding approaches
-    encoded_medicine = quote(medicine_name)
-    url1 = f"https://pharmeasy.in/search/all?name={encoded_medicine}"
-    
-    print(f"Testing medicine: {medicine_name}")
-    print(f"Encoded: {encoded_medicine}")
-    print(f"URL: {url1}")
-    print("=" * 80)
-    
-    # Try fetching
-    content = fetch_url_content_simple(url1, timeout=15)
-    
-    if content.startswith("Error"):
-        print("FAILED:")
-        print(content)
-    else:
-        print("SUCCESS:")
-        print(f"Content preview (first 500 chars):")
-        print(content[:500])
-        print("...")
-        
-        # Check if it looks like a valid page
-        if "pharmeasy" in content.lower() and ("product" in content.lower() or "medicine" in content.lower()):
-            print("✓ Content appears to be a valid Pharmeasy page")
-        else:
-            print("⚠ Content may not be a valid Pharmeasy page")
-    
-    return content
-
-# Node functions
 def ocr_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
     """
-    images: list of file paths (jpg/png)
-    Returns: markdown text (str)
-    Uses GPT-4 Vision for OCR
+    Process images and extract text using GPT-4 Vision.
     """
-    # System prompt for OCR
     system_prompt = """Task. You are an expert medical assistant working in a hospital located 
     in Kolkata, India. Transcribe this discharge summary issued to a patient exactly 
     (i.e. preserve all sections/headers/order/wording). If in doubt about some unclear writing,
@@ -381,18 +58,15 @@ def ocr_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
       relevant diagnoses, and check medications against India availability. Then output a 
       simple markdown document with all the contents with the same content as the original"""
     
-    # Initialize OpenAI client
     client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
     
     # Process images
     image_contents = []
     for image_path in state.get("images", []):
         try:
-            # Read and encode image
             with open(image_path, "rb") as image_file:
                 image_data = base64.b64encode(image_file.read()).decode('utf-8')
                 
-            # Determine image type
             image_type = "image/jpeg" if image_path.lower().endswith(('.jpg', '.jpeg')) else "image/png"
             
             image_contents.append({
@@ -409,29 +83,18 @@ def ocr_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
         markdown_text = "# OCR Error\nNo valid images found to process."
     else:
         try:
-            # Create messages for the API call
             messages = [
-                {
-                    "role": "system",
-                    "content": system_prompt
-                },
+                {"role": "system", "content": system_prompt},
                 {
                     "role": "user",
                     "content": [
-                        {
-                            "type": "text",
-                            "text": "Please transcribe these medical discharge summary pages into markdown format."
-                        }
+                        {"type": "text", "text": "Please transcribe these medical discharge summary pages into markdown format."}
                     ] + image_contents
                 }
             ]
             
-            # Get model-specific parameters
             api_params = get_openai_params(model, messages, max_tokens=4096, use_json_format=False)
-            
-            # Call OpenAI API with model-specific parameters
             response = client.chat.completions.create(**api_params)
-            
             markdown_text = response.choices[0].message.content
             
         except Exception as e:
@@ -448,38 +111,23 @@ def ocr_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
 
 def extract_diagnoses_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
     """
-    Returns: structured JSON (diagnoses)
-    Uses specified model for diagnosis extraction
+    Extract diagnoses and lab tests from the markdown text.
     """
-    # Get markdown from state
     markdown_text = state.get("markdown", "")
     
-    # System prompt for diagnosis extraction
     system_prompt = """You are an expert medical doctor practising in Kolkata India. You have been given a hospital discharge report of a patient in simple mardown text format. Your job is to identify all the relevant medical terms in the document related to a) diagnosis names b) lab test names from the document. Ignore all medicine names. Keep in mind common terminology used in that part of the world. Return a JSON structure of the form
 {"diagnoses": ["diagnosis term 1", "diagnosis term 2", ...], "lab_tests":["lab test name 1", "lab test name 2", ...]}"""
     
-    # Initialize OpenAI client
     client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
     
     try:
-        # Create messages for the API call
         messages = [
-            {
-                "role": "system",
-                "content": system_prompt
-            },
-            {
-                "role": "user",
-                "content": f"Please extract diagnoses and lab tests from this discharge summary:\n\n{markdown_text}"
-            }
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Please extract diagnoses and lab tests from this discharge summary:\n\n{markdown_text}"}
         ]
         
-        # Get model-specific parameters
         api_params = get_openai_params(model, messages, max_tokens=2048, use_json_format=True)
-        
-        # Call OpenAI API with model-specific parameters
         response = client.chat.completions.create(**api_params)
-        
         diagnoses_json = json.loads(response.choices[0].message.content)
         
     except Exception as e:
@@ -496,38 +144,23 @@ def extract_diagnoses_node(state: GraphState, model: str = "gpt-4o-mini") -> Gra
 
 def extract_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
     """
-    Returns: structured JSON (medications)
-    Uses specified model for medication extraction
+    Extract medications from the markdown text.
     """
-    # Get markdown from state
     markdown_text = state.get("markdown", "")
     
-    # System prompt for medication extraction
     system_prompt = """You are an expert medical doctor practising in Kolkata India. You have been given a hospital discharge report of a patient in simple mardown text format. Your job is to identify all the relevant medication names from the document along with instructions. In case of difficulty identifying a medication name, make sure the names match actual medications used in that part of the world. Return a JSON structure of the form
 {"medications": [{"name":"medicine_1", "instructions":"Twice daily", "duration":"continue"}, {"name":"medicine_2", "instructions":"as needed", "duration":"as needed"}, {"name":"medicine_3", "instructions":"BID", "duration":"10 days"}]}"""
     
-    # Initialize OpenAI client
     client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
     
     try:
-        # Create messages for the API call
         messages = [
-            {
-                "role": "system",
-                "content": system_prompt
-            },
-            {
-                "role": "user",
-                "content": f"Please extract medications with instructions and duration from this discharge summary:\n\n{markdown_text}"
-            }
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Please extract medications with instructions and duration from this discharge summary:\n\n{markdown_text}"}
         ]
         
-        # Get model-specific parameters
         api_params = get_openai_params(model, messages, max_tokens=2048, use_json_format=True)
-        
-        # Call OpenAI API with model-specific parameters
         response = client.chat.completions.create(**api_params)
-        
         medications_json = json.loads(response.choices[0].message.content)
         
     except Exception as e:
@@ -542,161 +175,82 @@ def extract_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> G
     state["medications"] = medications_json
     return state
 
-def fetch_pharmeasy_products_selenium(medicine_name: str, model: str = "gpt-4o-mini") -> List[Dict[str, str]]:
+def fetch_pharmeasy_content(medicine_name: str) -> str:
     """
-    Fetch products from PharmeEasy using Selenium to handle JavaScript.
-    
-    Args:
-        medicine_name: Name of the medicine to search for
-        model: OpenAI model to use for parsing
-    
-    Returns:
-        List of dictionaries with 'name' and 'url' keys for each product
+    Fetch the HTML content from PharmeEasy search page.
     """
     try:
-        from selenium import webdriver
-        from selenium.webdriver.chrome.options import Options
-        from selenium.webdriver.common.by import By
-        from selenium.webdriver.support.ui import WebDriverWait
-        from selenium.webdriver.support import expected_conditions as EC
-        from selenium.common.exceptions import TimeoutException, WebDriverException
-        import time
+        encoded_medicine = quote(medicine_name)
+        search_url = f"https://pharmeasy.in/search/all?name={encoded_medicine}"
         
-        # Setup Chrome options
-        chrome_options = Options()
-        chrome_options.add_argument("--headless")  # Run in background
-        chrome_options.add_argument("--no-sandbox")
-        chrome_options.add_argument("--disable-dev-shm-usage")
-        chrome_options.add_argument("--disable-gpu")
-        chrome_options.add_argument("--window-size=1920,1080")
-        chrome_options.add_argument("--user-agent=Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36")
+        headers = {
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+        }
         
-        print(f"Setting up Selenium for: {medicine_name}")
+        print(f"Fetching: {search_url}")
         
-        # Create driver
-        driver = webdriver.Chrome(options=chrome_options)
+        session = requests.Session()
+        session.headers.update(headers)
         
-        try:
-            # Construct URL and navigate
-            encoded_medicine = quote(medicine_name)
-            search_url = f"https://pharmeasy.in/search/all?name={encoded_medicine}"
-            
-            print(f"Navigating to: {search_url}")
-            driver.get(search_url)
-            
-            # Wait for page to load
-            time.sleep(3)
-            
-            # Try different selectors for product cards
-            product_selectors = [
-                "div[data-testid='product-card']",
-                ".ProductCard_productCard__fGBQ_",
-                "[class*='product-card']",
-                "[class*='ProductCard']",
-                ".product-item",
-                ".medicine-card"
-            ]
-            
-            products_found = False
-            for selector in product_selectors:
-                try:
-                    print(f"Trying selector: {selector}")
-                    wait = WebDriverWait(driver, 5)
-                    elements = wait.until(EC.presence_of_all_elements_located((By.CSS_SELECTOR, selector)))
-                    if elements:
-                        print(f"Found {len(elements)} elements with selector: {selector}")
-                        products_found = True
-                        break
-                except TimeoutException:
-                    continue
-            
-            if not products_found:
-                print("No product elements found, getting full page source")
-            
-            # Get page source after JavaScript execution
-            page_source = driver.page_source
-            print(f"Page source length: {len(page_source)} characters")
-            
-            # Check if we got a valid page
-            if "pharmeasy" not in page_source.lower():
-                print("Warning: Page doesn't appear to be Pharmeasy")
-            
-            # Parse with LLM
-            return parse_pharmeasy_products_with_llm_selenium(page_source, model)
-            
-        finally:
-            driver.quit()
-            
-    except ImportError:
-        print("Selenium not installed. Install with: pip install selenium")
-        print("Also install ChromeDriver: brew install chromedriver (on Mac)")
-        return []
-    except WebDriverException as e:
-        print(f"WebDriver error: {e}")
-        print("Make sure ChromeDriver is installed and in PATH")
-        return []
+        response = session.get(search_url, timeout=15, allow_redirects=True)
+        response.raise_for_status()
+        
+        content = response.text
+        print(f"Fetched {len(content)} characters from PharmeEasy")
+        
+        return content
+        
     except Exception as e:
-        print(f"Error with Selenium fetch: {e}")
-        return []
+        print(f"Error fetching Pharmeasy content: {e}")
+        return ""
 
-def parse_pharmeasy_products_with_llm_selenium(html_content: str, model: str = "gpt-4o-mini") -> List[Dict[str, str]]:
+def parse_pharmeasy_products(html_content: str, model: str = "gpt-4o-mini") -> List[Dict[str, str]]:
     """
-    Use LLM to parse PharmeEasy HTML content rendered by Selenium.
+    Use LLM to parse PharmeEasy HTML and extract product listings.
     """
     try:
-        # Initialize OpenAI client
         client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
         
-        # Enhanced system prompt for Selenium-rendered content
-        system_prompt = """You are an expert web scraper. Your job is to parse HTML content from PharmeEasy.in search results that has been rendered by JavaScript.
+        system_prompt = """You are an expert web scraper. Parse this HTML content from PharmeEasy.in search results.
 
-From the HTML content, find product listings/cards and extract up to 10 products. Look for:
-- Product names/titles (could be in various tags like h3, h4, div with product names)
-- Product URLs/links (look for href attributes pointing to product pages)
-- Price information if available
+Look for product listings in the main body of the page and extract up to 10 products. For each product, extract:
+- name: The product name/title
+- url: The product URL (if relative path, prepend "https://pharmeasy.in")
 
-Common Pharmeasy patterns to look for:
-- div elements with classes containing "product", "card", "medicine"
-- Links (a tags) with href containing "/online-medicine-order/" or "/medicines/"
-- Product names often in h3, h4, or span elements
+Look for patterns like:
+- Product cards or containers
+- Links to product pages (often containing "/online-medicine-order/" or "/medicines/")
+- Product names in headings, spans, or divs
+- Medicine names and dosages
 
-Return a JSON structure with the format:
+Return JSON format:
 {"products": [{"name": "Product Name 1", "url": "https://pharmeasy.in/online-medicine-order/..."}, {"name": "Product Name 2", "url": "https://pharmeasy.in/..."}, ...]}
 
-If URLs are relative (starting with /), prepend "https://pharmeasy.in". If you cannot find 10 products, return as many as you can find. If no products are found, return an empty products array."""
+If no products found, return empty products array."""
         
-        # Truncate HTML content to avoid token limits
-        max_html_length = 20000  # Increased for Selenium content
-        if len(html_content) > max_html_length:
-            # Try to keep the middle part which likely has products
+        # Truncate content to manageable size
+        max_length = 15000
+        if len(html_content) > max_length:
+            # Keep beginning and middle sections which likely contain products
             start_chunk = html_content[:5000]
-            end_chunk = html_content[-5000:]
             middle_start = len(html_content) // 3
             middle_chunk = html_content[middle_start:middle_start + 10000]
-            html_content = start_chunk + "\n... [content truncated] ...\n" + middle_chunk + "\n... [content truncated] ...\n" + end_chunk
+            html_content = start_chunk + "\n... [content truncated] ...\n" + middle_chunk
         
-        # Create messages for the API call
         messages = [
-            {
-                "role": "system",
-                "content": system_prompt
-            },
-            {
-                "role": "user",
-                "content": f"Please parse this PharmeEasy HTML content (rendered by Selenium) and extract the products:\n\n{html_content}"
-            }
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Parse this PharmeEasy HTML and extract product listings:\n\n{html_content}"}
         ]
         
-        # Get model-specific parameters
         api_params = get_openai_params(model, messages, max_tokens=2048, use_json_format=True)
-        
-        # Call OpenAI API
         response = client.chat.completions.create(**api_params)
         
-        parsed_result = json.loads(response.choices[0].message.content)
-        
-        # Extract products list
-        products = parsed_result.get("products", [])
+        result = json.loads(response.choices[0].message.content)
+        products = result.get("products", [])
         
         # Clean up URLs
         cleaned_products = []
@@ -704,31 +258,28 @@ If URLs are relative (starting with /), prepend "https://pharmeasy.in". If you c
             url = product.get("url", "")
             if url.startswith("/"):
                 url = "https://pharmeasy.in" + url
-            elif not url.startswith("http"):
+            elif not url.startswith("http") and url:
                 url = "https://pharmeasy.in/" + url
             
-            cleaned_products.append({
-                "name": product.get("name", ""),
-                "url": url
-            })
+            if product.get("name") and url:
+                cleaned_products.append({
+                    "name": product["name"],
+                    "url": url
+                })
         
-        print(f"Extracted {len(cleaned_products)} products from Selenium-rendered HTML")
+        print(f"Extracted {len(cleaned_products)} products from PharmeEasy page")
         return cleaned_products
         
     except Exception as e:
-        print(f"Error parsing Pharmeasy HTML with LLM: {e}")
+        print(f"Error parsing PharmeEasy HTML: {e}")
         return []
 
 def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
     """
-    Returns: fixed medications JSON
-    Uses Selenium to fetch PharmeEasy content for each medication and extracts products
+    Fetch PharmeEasy content for each medication and extract real product listings.
     """
-    # Get medications and diagnoses from state
     medications_data = state.get("medications", {"medications": []})
-    diagnoses_data = state.get("diagnoses", {"diagnoses": [], "lab_tests": []})
     
-    # Process each medication individually
     fixed_medications_list = []
     
     for i, medication in enumerate(medications_data.get("medications", [])):
@@ -736,44 +287,58 @@ def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> Graph
         print(f"\n--- Processing medication {i+1}: {medicine_name} ---")
         
         try:
-            # Fetch Pharmeasy products using Selenium
-            products = fetch_pharmeasy_products_selenium(medicine_name, model)
+            # Fetch PharmeEasy page content
+            html_content = fetch_pharmeasy_content(medicine_name)
             
-            # Create the enhanced medication object
-            medication_copy = medication.copy()
-            
-            if products:
-                # Use the first product as the primary match
-                primary_product = products[0]
-                medication_copy.update({
-                    "url": primary_product["url"],
-                    "pharmeasy_name": primary_product["name"],
-                    "all_products": products[:10]  # Store all found products
-                })
+            if html_content:
+                # Parse products from the HTML
+                products = parse_pharmeasy_products(html_content, model)
                 
-                # Check if the primary product name differs significantly from original
-                original_name_lower = medicine_name.lower()
-                pharmeasy_name_lower = primary_product["name"].lower()
+                # Create enhanced medication object
+                medication_copy = medication.copy()
                 
-                if original_name_lower not in pharmeasy_name_lower and pharmeasy_name_lower not in original_name_lower:
-                    medication_copy["modified_name"] = primary_product["name"]
-                    medication_copy["reason"] = f"Best match found on PharmeEasy: {primary_product['name']}"
-                
-                print(f"✓ Found {len(products)} products. Primary match: {primary_product['name']}")
+                if products:
+                    # Use first product as primary match
+                    primary_product = products[0]
+                    medication_copy.update({
+                        "url": primary_product["url"],
+                        "pharmeasy_name": primary_product["name"],
+                        "all_products": products[:10]  # Store up to 10 products
+                    })
+                    
+                    # Check if name differs significantly
+                    original_lower = medicine_name.lower()
+                    pharmeasy_lower = primary_product["name"].lower()
+                    
+                    if original_lower not in pharmeasy_lower and pharmeasy_lower not in original_lower:
+                        medication_copy["modified_name"] = primary_product["name"]
+                        medication_copy["reason"] = f"Best match found: {primary_product['name']}"
+                    
+                    print(f"✓ Found {len(products)} products. Primary: {primary_product['name']}")
+                else:
+                    # No products found in parsed content
+                    fallback_url = f"https://pharmeasy.in/search/all?name={medicine_name.replace(' ', '%20')}"
+                    medication_copy.update({
+                        "url": fallback_url,
+                        "reason": "No products found in page content, using search URL",
+                        "all_products": []
+                    })
+                    print(f"✗ No products extracted from page content")
             else:
-                # No products found, use fallback
+                # Failed to fetch content
                 fallback_url = f"https://pharmeasy.in/search/all?name={medicine_name.replace(' ', '%20')}"
+                medication_copy = medication.copy()
                 medication_copy.update({
                     "url": fallback_url,
-                    "reason": "No specific products found on PharmeEasy, providing search URL",
+                    "reason": "Failed to fetch page content, using search URL",
                     "all_products": []
                 })
-                print(f"✗ No products found for {medicine_name}, using fallback URL")
+                print(f"✗ Failed to fetch page content")
             
             fixed_medications_list.append(medication_copy)
-                
+            
         except Exception as e:
-            print(f"✗ Error processing medication {medicine_name}: {e}")
+            print(f"✗ Error processing {medicine_name}: {e}")
             # Fallback for this medication
             medication_copy = medication.copy()
             fallback_url = f"https://pharmeasy.in/search/all?name={medicine_name.replace(' ', '%20')}"
@@ -784,12 +349,10 @@ def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> Graph
             })
             fixed_medications_list.append(medication_copy)
     
-    # Create final result
     fixed_medications_json = {"medications": fixed_medications_list}
     
-    # Print the fixed medications output
     print(f"\n=== Fix Medications Node Output (Model: {model}) ===")
-    print(f"Processed {len(fixed_medications_list)} medications using Selenium")
+    print(f"Processed {len(fixed_medications_list)} medications")
     for med in fixed_medications_list:
         product_count = len(med.get('all_products', []))
         status = "✓" if product_count > 0 else "✗"
@@ -805,12 +368,9 @@ def add_summary_pills_node(state: GraphState, model: str = "gpt-4o-mini") -> Gra
     """
     print(f"=== Add Summary Pills Node (Model: {model}) ===")
     
-    # Get data from state
     diagnoses = state.get("diagnoses", {})
-    medications = state.get("medications", {})
     fixed_medications = state.get("fixed_medications", {})
     
-    # Generate a simple HTML summary
     html_content = f"""
     <!DOCTYPE html>
     <html>
@@ -846,58 +406,21 @@ def add_summary_pills_node(state: GraphState, model: str = "gpt-4o-mini") -> Gra
     state["html_summary"] = html_content
     return state
 
-# Create the LangGraph workflow
-def create_app_graph():
-    """Create and return the LangGraph workflow."""
-    
-    # Create the graph
-    workflow = StateGraph(GraphState)
-    
-    # Add nodes
-    workflow.add_node("OCR", ocr_node)
-    workflow.add_node("ExtractDiagnoses", extract_diagnoses_node)
-    workflow.add_node("ExtractMedications", extract_medications_node)
-    workflow.add_node("FixMedications", fix_medications_node)
-    workflow.add_node("AddSummaryPills", add_summary_pills_node)
-    
-    # Set entry point
-    workflow.set_entry_point("OCR")
-    
-    # Add edges (workflow connections)
-    workflow.add_edge("OCR", "ExtractDiagnoses")
-    workflow.add_edge("ExtractDiagnoses", "ExtractMedications")
-    workflow.add_edge("ExtractMedications", "FixMedications")
-    workflow.add_edge("FixMedications", "AddSummaryPills")
-    
-    # Compile the graph
-    return workflow.compile()
-
 class AppGraph:
     """Wrapper class for the LangGraph workflow with convenience methods."""
     
     def __init__(self):
-        self.graph = create_app_graph()
         self.state = {}
     
     def run_node(self, node_name: str, input_data=None, model: str = "gpt-4o-mini"):
         """
         Run a specific node in the workflow.
-        
-        Args:
-            node_name: Name of the node to run
-            input_data: Input data for the node
-            model: Model to use for the node
-            
-        Returns:
-            Output from the node
         """
         print(f"Running node: {node_name} with model: {model}")
         
-        # Handle different input types
         if node_name == "OCR" and input_data:
             self.state["images"] = input_data
         
-        # Run the specific node function
         if node_name == "OCR":
             self.state = ocr_node(self.state, model)
             return self.state.get("markdown", "")
@@ -926,15 +449,3 @@ class AppGraph:
 
 # Create the app_graph instance
 app_graph = AppGraph()
-
-# Add helper functions as attributes for compatibility
-app_graph.fetch_url_content = fetch_url_content
-app_graph.fetch_url_content_simple = fetch_url_content_simple
-app_graph.duckduckgo_search_results = duckduckgo_search_results
-app_graph.duckduckgo_search = duckduckgo_search
-app_graph.test_pharmeasy_fetch = test_pharmeasy_fetch
-app_graph.fetch_pharmeasy_products_selenium = fetch_pharmeasy_products_selenium
-app_graph.web_search_tool = web_search_tool
-
-# For debugging - make state accessible
-current_state = app_graph.state
