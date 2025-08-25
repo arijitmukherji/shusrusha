@@ -274,11 +274,96 @@ If no products found, return empty products array."""
         print(f"Error parsing PharmeEasy HTML: {e}")
         return []
 
+def select_best_product_match(medicine_name: str, products: List[Dict[str, str]], diagnoses: List[str], model: str = "gpt-4o-mini") -> Dict[str, Any]:
+    """
+    Use LLM to select the best matching product based on medicine name similarity, 
+    diagnoses relevance, drug category, strength, etc.
+    """
+    try:
+        client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+        
+        system_prompt = """You are an expert pharmacist practicing in India. Your job is to select the best matching medication product from a list of options.
+
+Consider these factors when selecting the best match:
+1. NAME SIMILARITY: How closely does the product name match the original medicine name?
+2. DRUG CATEGORY: Does the medication category match what would be expected for the diagnoses?
+3. STRENGTH/DOSAGE: Is the strength appropriate and commonly prescribed?
+4. FORMULATION: Is the formulation (tablet, syrup, injection, etc.) appropriate?
+5. BRAND VS GENERIC: Consider both brand and generic equivalents
+6. COMMON USAGE: Is this a commonly prescribed medication for the given diagnoses?
+
+Original medicine name: The name extracted from the prescription
+Available products: List of products found on the pharmacy website
+Patient diagnoses: Medical conditions that might influence the choice
+
+Return your analysis in JSON format:
+{
+  "selected_product_index": 0,
+  "confidence_score": 85,
+  "reasoning": "Detailed explanation of why this product was selected",
+  "name_similarity": "high/medium/low",
+  "dosage_appropriateness": "appropriate/too_high/too_low/unknown",
+  "category_match": "exact/similar/different",
+  "alternative_suggestions": ["index1", "index2"]
+}
+
+If no good match is found, set selected_product_index to -1."""
+        
+        # Prepare the product list for analysis
+        products_text = ""
+        for i, product in enumerate(products):
+            products_text += f"{i}. {product['name']} - {product['url']}\n"
+        
+        diagnoses_text = ", ".join(diagnoses) if diagnoses else "No specific diagnoses provided"
+        
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"""Please analyze and select the best matching product:
+
+Original medicine name: {medicine_name}
+Patient diagnoses: {diagnoses_text}
+
+Available products:
+{products_text}
+
+Select the best match considering name similarity, appropriateness for the diagnoses, dosage strength, and common medical practice in India."""}
+        ]
+        
+        api_params = get_openai_params(model, messages, max_tokens=1024, use_json_format=True)
+        response = client.chat.completions.create(**api_params)
+        
+        result = json.loads(response.choices[0].message.content)
+        
+        selected_index = result.get("selected_product_index", -1)
+        
+        if selected_index >= 0 and selected_index < len(products):
+            return {
+                "product": products[selected_index],
+                "analysis": result,
+                "success": True
+            }
+        else:
+            return {
+                "product": None,
+                "analysis": result,
+                "success": False
+            }
+            
+    except Exception as e:
+        print(f"Error in product selection: {e}")
+        return {
+            "product": products[0] if products else None,
+            "analysis": {"reasoning": f"Error in selection, using first product: {str(e)}"},
+            "success": False
+        }
+
 def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
     """
-    Fetch PharmeEasy content for each medication and extract real product listings.
+    Fetch PharmeEasy content for each medication and use LLM to select the best matching product.
     """
     medications_data = state.get("medications", {"medications": []})
+    diagnoses_data = state.get("diagnoses", {"diagnoses": [], "lab_tests": []})
+    diagnoses_list = diagnoses_data.get("diagnoses", [])
     
     fixed_medications_list = []
     
@@ -287,7 +372,7 @@ def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> Graph
         print(f"\n--- Processing medication {i+1}: {medicine_name} ---")
         
         try:
-            # Fetch PharmeEasy page content
+            # Fetch Pharmeasy page content
             html_content = fetch_pharmeasy_content(medicine_name)
             
             if html_content:
@@ -298,30 +383,79 @@ def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> Graph
                 medication_copy = medication.copy()
                 
                 if products:
-                    # Use first product as primary match
-                    primary_product = products[0]
-                    medication_copy.update({
-                        "url": primary_product["url"],
-                        "pharmeasy_name": primary_product["name"],
-                        "all_products": products[:10]  # Store up to 10 products
-                    })
+                    print(f"Found {len(products)} products, selecting best match...")
                     
-                    # Check if name differs significantly
-                    original_lower = medicine_name.lower()
-                    pharmeasy_lower = primary_product["name"].lower()
+                    # Use LLM to select the best matching product
+                    selection_result = select_best_product_match(
+                        medicine_name, 
+                        products, 
+                        diagnoses_list, 
+                        model
+                    )
                     
-                    if original_lower not in pharmeasy_lower and pharmeasy_lower not in original_lower:
-                        medication_copy["modified_name"] = primary_product["name"]
-                        medication_copy["reason"] = f"Best match found: {primary_product['name']}"
+                    if selection_result["success"] and selection_result["product"]:
+                        primary_product = selection_result["product"]
+                        analysis = selection_result["analysis"]
+                        
+                        medication_copy.update({
+                            "url": primary_product["url"],
+                            "pharmeasy_name": primary_product["name"],
+                            "all_products": products[:10],  # Store up to 10 products
+                            "selection_confidence": analysis.get("confidence_score", 0),
+                            "selection_reasoning": analysis.get("reasoning", ""),
+                            "name_similarity": analysis.get("name_similarity", "unknown"),
+                            "dosage_appropriateness": analysis.get("dosage_appropriateness", "unknown"),
+                            "category_match": analysis.get("category_match", "unknown")
+                        })
+                        
+                        # Check if name differs significantly
+                        original_lower = medicine_name.lower()
+                        pharmeasy_lower = primary_product["name"].lower()
+                        
+                        if original_lower not in pharmeasy_lower and pharmeasy_lower not in original_lower:
+                            medication_copy["modified_name"] = primary_product["name"]
+                            medication_copy["reason"] = f"LLM selected best match: {primary_product['name']} (confidence: {analysis.get('confidence_score', 0)}%)"
+                        
+                        print(f"✓ LLM selected: {primary_product['name']}")
+                        print(f"  Confidence: {analysis.get('confidence_score', 0)}%")
+                        print(f"  Reasoning: {analysis.get('reasoning', 'No reasoning provided')[:100]}...")
+                        
+                        # Show alternative suggestions if available
+                        alternatives = analysis.get("alternative_suggestions", [])
+                        if alternatives:
+                            alt_names = []
+                            for alt_idx in alternatives:
+                                if isinstance(alt_idx, int) and 0 <= alt_idx < len(products):
+                                    alt_names.append(products[alt_idx]["name"])
+                            if alt_names:
+                                print(f"  Alternatives: {', '.join(alt_names[:2])}")
                     
-                    print(f"✓ Found {len(products)} products. Primary: {primary_product['name']}")
+                    else:
+                        # LLM couldn't find a good match, use first product as fallback
+                        primary_product = products[0]
+                        analysis = selection_result["analysis"]
+                        
+                        medication_copy.update({
+                            "url": primary_product["url"],
+                            "pharmeasy_name": primary_product["name"],
+                            "all_products": products[:10],
+                            "selection_confidence": 0,
+                            "selection_reasoning": analysis.get("reasoning", "No good match found, using first result"),
+                            "modified_name": primary_product["name"],
+                            "reason": f"No good match found (LLM analysis), using: {primary_product['name']}"
+                        })
+                        
+                        print(f"⚠ LLM found no good match, using first result: {primary_product['name']}")
+                        print(f"  Reasoning: {analysis.get('reasoning', 'No reasoning provided')}")
+                
                 else:
                     # No products found in parsed content
                     fallback_url = f"https://pharmeasy.in/search/all?name={medicine_name.replace(' ', '%20')}"
                     medication_copy.update({
                         "url": fallback_url,
                         "reason": "No products found in page content, using search URL",
-                        "all_products": []
+                        "all_products": [],
+                        "selection_confidence": 0
                     })
                     print(f"✗ No products extracted from page content")
             else:
@@ -331,7 +465,8 @@ def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> Graph
                 medication_copy.update({
                     "url": fallback_url,
                     "reason": "Failed to fetch page content, using search URL",
-                    "all_products": []
+                    "all_products": [],
+                    "selection_confidence": 0
                 })
                 print(f"✗ Failed to fetch page content")
             
@@ -345,7 +480,8 @@ def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> Graph
             medication_copy.update({
                 "url": fallback_url,
                 "reason": f"Error during processing: {str(e)}",
-                "all_products": []
+                "all_products": [],
+                "selection_confidence": 0
             })
             fixed_medications_list.append(medication_copy)
     
@@ -355,8 +491,10 @@ def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> Graph
     print(f"Processed {len(fixed_medications_list)} medications")
     for med in fixed_medications_list:
         product_count = len(med.get('all_products', []))
+        confidence = med.get('selection_confidence', 0)
         status = "✓" if product_count > 0 else "✗"
-        print(f"{status} {med.get('name', 'Unknown')}: {product_count} products found")
+        confidence_indicator = f" ({confidence}%)" if confidence > 0 else ""
+        print(f"{status} {med.get('name', 'Unknown')}: {product_count} products found{confidence_indicator}")
     print("==================================================")
     
     state["fixed_medications"] = fixed_medications_json
