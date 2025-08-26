@@ -54,10 +54,11 @@ def ocr_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
     """
     system_prompt = """Task. You are an expert medical assistant working in a hospital located 
     in Kolkata, India. Transcribe this discharge summary issued to a patient exactly 
-    (i.e. preserve all sections/headers/order/wording). If in doubt about some unclear writing,
+    (i.e. preserve all sections/headers/order/ and all written text). If in doubt about some unclear writing,
       try to match with terms that make sense in an India context, for medical field and 
       relevant diagnoses, and check medications against India availability. Then output a 
-      simple markdown document with all the contents with the same content as the original"""
+      simple markdown document with all the contents with the same content as the original. For 
+      prescribed medications, "Tab" is often written to look like "76" """
     
     client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
     
@@ -447,9 +448,10 @@ def add_summary_pills_node(state: GraphState, model: str = "gpt-4o-mini") -> Gra
     main_content_html = markdown_to_html(markdown_text)
     
     # Add medication pills to the HTML content
-    print("Adding medication pills to content...")
-    enhanced_html = add_medication_pills_to_html(main_content_html, fixed_medications, model)
-    
+    #print("Adding medication pills to content...")
+    #enhanced_html = add_medication_pills_to_html(main_content_html, fixed_medications, model)
+    enhanced_html = main_content_html
+
     # Generate medications summary table
     print("Generating medications summary table...")
     medications_table = generate_medications_table(fixed_medications)
@@ -790,10 +792,11 @@ def select_best_product_match(medicine_name: str, products: List[Dict[str, str]]
         system_prompt = """You are an expert pharmacist practicing in India. Your job is to select the best matching medication product from a list of options.
 
 Consider these factors when selecting the best match:
-1. NAME SIMILARITY: How closely does the product name match the original medicine name?
+1. NAME SIMILARITY: How closely does the product name match the original medicine name? Either fully
+or does it contain the original name as a substring?
    - "high": Exact match or very close (>90% similar)
    - "medium": Recognizably similar (70-90% similar) 
-   - "low": Different but same category (<70% similar)
+   - "low": Different but similar(<70% similar)
 2. DRUG CATEGORY: Does the medication category match what would be expected for the diagnoses?
 3. STRENGTH/DOSAGE: Is the strength appropriate and commonly prescribed?
 4. FORMULATION: Is the formulation (tablet, syrup, injection, etc.) appropriate?
@@ -801,9 +804,9 @@ Consider these factors when selecting the best match:
 6. COMMON USAGE: Is this a commonly prescribed medication for the given diagnoses?
 
 IMPORTANT: When evaluating name similarity, consider:
-- Exact matches or minor variations (like "Paracetamol" vs "Paracetamol 500mg") should be "high"
+- Exact matches or minor variations (like "Paracetamol" vs "Paracetamol 500mg tablet") should be "high"
 - Same drug different brand (like "Paracetamol" vs "Crocin") should be "medium" 
-- Single character differences should be "high" similarity
+- Single character differences should be "high" similarity. This includes origianal name as a substring
 - Generic vs brand names of same drug should be "medium" to "high"
 
 Return your analysis in JSON format:
