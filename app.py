@@ -132,7 +132,6 @@ st.markdown("""
         border-radius: 5px;
         font-size: 0.9rem;
     }
-</style>""", unsafe_allow_html=True)
     .medication-card {
         background: linear-gradient(135deg, #fff3cd, #ffeaa7);
         border: 1px solid #ffeaa7;
@@ -421,29 +420,39 @@ def main():
         if 'show_processing_logs' not in st.session_state:
             st.session_state.show_processing_logs = False
         
+        # Create a placeholder container for processing output that can be cleared
+        processing_container = st.empty()
+        
         # Show different buttons based on processing state
         if not st.session_state.processing_completed:
-            if st.button("🚀 Start Processing", type="primary", use_container_width=True):
-                # Reset processing state for new run
-                st.session_state.processing_logs = []
-                st.session_state.processing_completed = False
-                st.session_state.show_processing_logs = False
-                process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_model, 
-                                save_files, open_files, show_debug, 
-                                run_diagnoses, run_medications, run_pharmacy, run_summary)
-        else:
-            # Show processing completed button
-            col_completed, col_reprocess = st.columns([3, 1])
-            with col_completed:
-                if st.button("✅ Processing Completed (click to view)", type="secondary", use_container_width=True):
-                    st.session_state.show_processing_logs = not st.session_state.show_processing_logs
-            with col_reprocess:
-                if st.button("🔄 Reprocess", type="primary", use_container_width=True):
-                    # Reset state and reprocess
-                    st.session_state.processing_completed = False
+            with processing_container.container():
+                if st.button("🚀 Start Processing", type="primary", use_container_width=True):
+                    # Reset processing state for new run
                     st.session_state.processing_logs = []
+                    st.session_state.processing_completed = False
                     st.session_state.show_processing_logs = False
-                    st.rerun()
+                    
+                    # Create a nested container for all processing output
+                    with st.container():
+                        process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_model, 
+                                        save_files, open_files, show_debug, 
+                                        run_diagnoses, run_medications, run_pharmacy, run_summary,
+                                        processing_container)  # Pass the container to clear it later
+        else:
+            # Clear the processing container and show completion buttons
+            with processing_container.container():
+                # Show processing completed button
+                col_completed, col_reprocess = st.columns([3, 1])
+                with col_completed:
+                    if st.button("✅ Processing Completed (click to view)", type="secondary", use_container_width=True):
+                        st.session_state.show_processing_logs = not st.session_state.show_processing_logs
+                with col_reprocess:
+                    if st.button("🔄 Reprocess", type="primary", use_container_width=True):
+                        # Reset state and reprocess
+                        st.session_state.processing_completed = False
+                        st.session_state.processing_logs = []
+                        st.session_state.show_processing_logs = False
+                        st.rerun()
         
         # Show processing logs modal when requested
         if st.session_state.show_processing_logs and st.session_state.processing_logs:
@@ -473,6 +482,10 @@ def main():
                 
                 st.markdown("---")
 
+    # Display results if processing has been completed
+    if st.session_state.get('processing_completed', False) and 'processing_results' in st.session_state:
+        display_results()
+
 def add_processing_log(message, log_type="info"):
     """Add a message to the processing logs"""
     if 'processing_logs' not in st.session_state:
@@ -485,7 +498,7 @@ def add_processing_log(message, log_type="info"):
     })
 
 def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_model, save_files, open_files, show_debug, 
-                     run_diagnoses, run_medications, run_pharmacy, run_summary):
+                     run_diagnoses, run_medications, run_pharmacy, run_summary, processing_container=None):
     """Process the uploaded documents through the entire pipeline"""
     
     # Initialize session state for results
@@ -662,24 +675,37 @@ def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_mode
             add_processing_log(final_msg, "success")
             status_text.text(final_msg)
             
-            # Set completion state and display results
+            # Set completion state 
             st.session_state.processing_completed = True
             add_processing_log("🎉 All processing steps completed successfully!", "success")
             
-            # Clear the progress indicators after a short delay
-            progress_bar.empty()
-            status_text.empty()
+            # Clear the processing container to hide all the processing output
+            if processing_container:
+                processing_container.empty()
             
-            # Display results
-            display_results()
+            # Trigger rerun to show the completed state
+            st.rerun()
             
     except Exception as e:
         error_msg = f"❌ Error during processing: {str(e)}"
         add_processing_log(error_msg, "error")
         st.error(error_msg)
         st.session_state.processing_completed = True  # Mark as completed even if failed so user can view logs
+        
+        # Clear the processing container
+        if processing_container:
+            processing_container.empty()
+        
         if show_debug:
             st.exception(e)
+        
+        # Trigger rerun to show the completed state
+        st.rerun()
+        
+        # Clear the processing container and trigger rerun
+        if processing_container:
+            processing_container.empty()
+        st.rerun()
 
 def clean_markdown(markdown):
     """Clean up markdown text by removing code block wrappers"""
