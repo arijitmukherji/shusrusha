@@ -14,6 +14,7 @@ from dotenv import load_dotenv
 from langgraph_app import app_graph
 import zipfile
 import io
+from datetime import datetime
 
 # Load environment variables
 load_dotenv()
@@ -57,15 +58,114 @@ st.markdown("""
         padding: 1rem;
         margin: 1rem 0;
     }
-    .info-box {
+        .info-box {
         background: #d1ecf1;
         border: 1px solid #bee5eb;
         border-radius: 5px;
         padding: 1rem;
         margin: 1rem 0;
     }
-</style>
-""", unsafe_allow_html=True)
+    .file-manager-modal {
+        background: #f8f9fa;
+        border: 2px solid #dee2e6;
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 1rem 0;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    }
+    .file-item {
+        background: white;
+        border: 1px solid #e9ecef;
+        border-radius: 5px;
+        padding: 0.5rem;
+        margin: 0.25rem 0;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .compact-uploader {
+        padding: 0.5rem;
+        border: 2px dashed #6c757d;
+        border-radius: 5px;
+        text-align: center;
+        background: #f8f9fa;
+    }
+    .instructions-modal {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 0.5rem 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+    .diagnosis-item {
+        background: linear-gradient(135deg, #d4edda, #c3e6cb);
+        border: 1px solid #c3e6cb;
+        border-radius: 8px;
+        padding: 0.75rem;
+        margin: 0.5rem 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        font-weight: 500;
+    }
+        .lab-test-item {
+        background: linear-gradient(135deg, #d1ecf1, #bee5eb);
+        border: 1px solid #bee5eb;
+        border-radius: 8px;
+        padding: 0.75rem;
+        margin: 0.5rem 0;
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+        font-weight: 500;
+    }
+    .processing-logs-modal {
+        background: #f8f9fa;
+        border: 2px solid #dee2e6;
+        border-radius: 10px;
+        padding: 1rem;
+        margin: 1rem 0;
+        box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        max-height: 400px;
+        overflow-y: auto;
+    }
+    .log-entry {
+        padding: 0.5rem;
+        margin: 0.25rem 0;
+        border-radius: 5px;
+        font-size: 0.9rem;
+    }
+</style>""", unsafe_allow_html=True)
+    .medication-card {
+        background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+        border: 1px solid #ffeaa7;
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 0.75rem 0;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    }
+    .medication-card-high {
+        background: linear-gradient(135deg, #d4edda, #c3e6cb);
+        border: 1px solid #c3e6cb;
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 0.75rem 0;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    }
+    .medication-card-medium {
+        background: linear-gradient(135deg, #fff3cd, #ffeaa7);
+        border: 1px solid #ffeaa7;
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 0.75rem 0;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    }
+    .medication-card-low {
+        background: linear-gradient(135deg, #f8d7da, #f5c6cb);
+        border: 1px solid #f5c6cb;
+        border-radius: 8px;
+        padding: 1rem;
+        margin: 0.75rem 0;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
+    }
+</style>""", unsafe_allow_html=True)
 
 def main():
     # Header
@@ -138,31 +238,133 @@ def main():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        # File upload section
+        # Compact file upload section
         st.markdown('<div class="step-header"><h3>📤 Step 1: Upload Discharge Summary Images</h3></div>', unsafe_allow_html=True)
         
-        uploaded_files = st.file_uploader(
-            "Choose image files",
-            type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'],
-            accept_multiple_files=True,
-            key="multi_file_uploader_v2",
-            help="Upload multiple images of discharge summary pages. Supported formats: PNG, JPG, JPEG, GIF, BMP, TIFF"
-        )
+        # Initialize session state for file management
+        if 'selected_files' not in st.session_state:
+            st.session_state.selected_files = []
+        if 'show_file_manager' not in st.session_state:
+            st.session_state.show_file_manager = False
         
+        # Ensure selected_files is always a list
+        if not isinstance(st.session_state.selected_files, list):
+            st.session_state.selected_files = []
+        
+        # Compact one-line interface
+        col_upload, col_manage = st.columns([3, 1])
+        
+        with col_upload:
+            # Initial file selection or file count display
+            if not st.session_state.selected_files:
+                # Show file uploader for initial selection
+                initial_files = st.file_uploader(
+                    "",
+                    type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'],
+                    accept_multiple_files=True,
+                    key="initial_file_uploader",
+                    label_visibility="collapsed",
+                    help="Select discharge summary images (PNG, JPG, JPEG, GIF, BMP, TIFF)"
+                )
+                
+                if initial_files:
+                    st.session_state.selected_files = list(initial_files)
+                    st.rerun()
+            else:
+                # Show compact file count
+                total_size = sum(f.size for f in st.session_state.selected_files) / (1024 * 1024)
+                st.markdown(f'<div class="success-box">✅ {len(st.session_state.selected_files)} files selected ({total_size:.1f} MB)</div>', unsafe_allow_html=True)
+        
+        with col_manage:
+            if st.session_state.selected_files:
+                if st.button("📁 Manage Files", key="manage_files_btn"):
+                    st.session_state.show_file_manager = True
+                    st.rerun()
+            
+            # Safety: Close file manager if no files are selected
+            if not st.session_state.selected_files and st.session_state.show_file_manager:
+                st.session_state.show_file_manager = False
+        
+        # File Manager Modal
+        if st.session_state.show_file_manager:
+            st.markdown("---")
+            with st.container():
+                st.markdown("### 📁 File Manager")
+                
+                # File management interface
+                col_files, col_actions = st.columns([2, 1])
+                
+                with col_files:
+                    st.markdown("**Current Files:**")
+                    files_to_remove = []
+                    
+                    if st.session_state.selected_files:
+                        for i, file in enumerate(st.session_state.selected_files):
+                            file_size = file.size / (1024 * 1024)
+                            col_info, col_remove = st.columns([4, 1])
+                            with col_info:
+                                st.write(f"{i+1}. **{file.name}** ({file_size:.2f} MB)")
+                            with col_remove:
+                                if st.button("🗑️", key=f"remove_file_{i}", help="Remove this file"):
+                                    files_to_remove.append(i)
+                    else:
+                        st.info("No files selected")
+                    
+                    # Remove selected files
+                    if files_to_remove:
+                        for idx in reversed(files_to_remove):  # Remove from end to avoid index issues
+                            st.session_state.selected_files.pop(idx)
+                        st.rerun()
+                
+                with col_actions:
+                    st.markdown("**Actions:**")
+                    
+                    # Add more files
+                    additional_files = st.file_uploader(
+                        "Add more files",
+                        type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'],
+                        accept_multiple_files=True,
+                        key="additional_file_uploader",
+                        help="Add more discharge summary images"
+                    )
+                    
+                    if additional_files:
+                        # Add new files to existing selection (avoid duplicates by name)
+                        existing_names = [f.name for f in st.session_state.selected_files]
+                        new_files = [f for f in additional_files if f.name not in existing_names]
+                        
+                        # Only update and rerun if there are actually new files
+                        if new_files:
+                            st.session_state.selected_files.extend(new_files)
+                            st.success(f"Added {len(new_files)} new files")
+                            # Only rerun if we actually added files
+                            st.rerun()
+                        
+                        # Show warning about duplicates without rerunning
+                        if len(new_files) != len(additional_files):
+                            st.warning(f"Skipped {len(additional_files) - len(new_files)} duplicate files")
+                    
+                    # Clear all files
+                    if st.button("🗑️ Clear All", key="clear_all_files"):
+                        st.session_state.selected_files = []
+                        st.rerun()
+                
+                # Modal controls
+                col_done, col_cancel = st.columns(2)
+                with col_done:
+                    if st.button("✅ Done", key="file_manager_done"):
+                        st.session_state.show_file_manager = False
+                        st.rerun()
+                with col_cancel:
+                    if st.button("❌ Cancel", key="file_manager_cancel"):
+                        st.session_state.show_file_manager = False
+                        st.rerun()
+            
+            st.markdown("---")
+        
+        # File validation for selected files
+        uploaded_files = st.session_state.selected_files
         if uploaded_files:
-            st.markdown(f'<div class="success-box">✅ Uploaded {len(uploaded_files)} files</div>', unsafe_allow_html=True)
-            
-            # Show uploaded files with details
-            total_size = 0
-            for i, file in enumerate(uploaded_files, 1):
-                file_size = file.size
-                total_size += file_size
-                size_mb = file_size / (1024 * 1024)
-                st.write(f"{i}. **{file.name}** ({size_mb:.2f} MB)")
-            
-            st.write(f"**Total size:** {total_size / (1024 * 1024):.2f} MB")
-            
-            # File validation
             valid_files = []
             invalid_files = []
             for file in uploaded_files:
@@ -176,34 +378,111 @@ def main():
             
             if len(valid_files) != len(uploaded_files):
                 st.info(f"Processing {len(valid_files)} valid files out of {len(uploaded_files)} uploaded.")
+        else:
+            uploaded_files = None
     
     with col2:
-        # Instructions
-        st.markdown("### 📖 Instructions")
-        st.markdown("""
-        1. **Upload Images**: Select multiple images of your discharge summary
-        2. **Configure**: Choose AI models and processing options
-        3. **Process**: Click the button to start processing
-        4. **Review**: Check the extracted information
-        5. **Download**: Get your interactive HTML report
+        # Clickable Instructions
+        if 'show_instructions' not in st.session_state:
+            st.session_state.show_instructions = False
         
-        **Supported formats**: PNG, JPG, JPEG, GIF, BMP, TIFF
+        if st.button("📖 How to Use Instructions", use_container_width=True, help="Click to show/hide usage instructions"):
+            st.session_state.show_instructions = not st.session_state.show_instructions
         
-        **Tips:**
-        - 📸 Ensure images are clear and readable
-        - 📑 Upload pages in the correct order
-        - 🔧 Use gpt-4o for better accuracy
-        - 💾 Enable file auto-opening for quick review
-        """)
+        # Show instructions modal when toggled
+        if st.session_state.show_instructions:
+            with st.container():
+                st.markdown('<div class="instructions-modal">', unsafe_allow_html=True)
+                st.markdown("### 📖 Instructions")
+                st.markdown("1. **Upload Images**: Select multiple images of your discharge summary")
+                st.markdown("2. **Configure**: Choose AI models and processing options")
+                st.markdown("3. **Process**: Click the button to start processing")
+                st.markdown("4. **Review**: Check the extracted information")
+                st.markdown("5. **Download**: Get your interactive HTML report")
+                st.markdown("")
+                st.markdown("**Supported formats**: PNG, JPG, JPEG, GIF, BMP, TIFF")
+                st.markdown("")
+                st.markdown("**Tips:**")
+                st.markdown("- 📸 Ensure images are clear and readable")
+                st.markdown("- 📑 Upload pages in the correct order")
+                st.markdown("- 🔧 Use gpt-4o for better accuracy")
+                st.markdown("- 💾 Enable file auto-opening for quick review")
+                st.markdown('</div>', unsafe_allow_html=True)
     
     # Processing section
     if uploaded_files:
         st.markdown('<div class="step-header"><h3>🔄 Step 2: Process Documents</h3></div>', unsafe_allow_html=True)
         
-        if st.button("🚀 Start Processing", type="primary", use_container_width=True):
-            process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_model, 
-                            save_files, open_files, show_debug, 
-                            run_diagnoses, run_medications, run_pharmacy, run_summary)
+        # Initialize processing state variables
+        if 'processing_completed' not in st.session_state:
+            st.session_state.processing_completed = False
+        if 'processing_logs' not in st.session_state:
+            st.session_state.processing_logs = []
+        if 'show_processing_logs' not in st.session_state:
+            st.session_state.show_processing_logs = False
+        
+        # Show different buttons based on processing state
+        if not st.session_state.processing_completed:
+            if st.button("🚀 Start Processing", type="primary", use_container_width=True):
+                # Reset processing state for new run
+                st.session_state.processing_logs = []
+                st.session_state.processing_completed = False
+                st.session_state.show_processing_logs = False
+                process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_model, 
+                                save_files, open_files, show_debug, 
+                                run_diagnoses, run_medications, run_pharmacy, run_summary)
+        else:
+            # Show processing completed button
+            col_completed, col_reprocess = st.columns([3, 1])
+            with col_completed:
+                if st.button("✅ Processing Completed (click to view)", type="secondary", use_container_width=True):
+                    st.session_state.show_processing_logs = not st.session_state.show_processing_logs
+            with col_reprocess:
+                if st.button("🔄 Reprocess", type="primary", use_container_width=True):
+                    # Reset state and reprocess
+                    st.session_state.processing_completed = False
+                    st.session_state.processing_logs = []
+                    st.session_state.show_processing_logs = False
+                    st.rerun()
+        
+        # Show processing logs modal when requested
+        if st.session_state.show_processing_logs and st.session_state.processing_logs:
+            with st.container():
+                st.markdown("---")
+                st.markdown("### 📋 Processing Logs")
+                
+                # Create a scrollable container for logs
+                log_container = st.container()
+                with log_container:
+                    for log_entry in st.session_state.processing_logs:
+                        if log_entry['type'] == 'info':
+                            st.info(log_entry['message'])
+                        elif log_entry['type'] == 'success':
+                            st.success(log_entry['message'])
+                        elif log_entry['type'] == 'warning':
+                            st.warning(log_entry['message'])
+                        elif log_entry['type'] == 'error':
+                            st.error(log_entry['message'])
+                        else:
+                            st.write(log_entry['message'])
+                
+                # Close button
+                if st.button("❌ Close Logs", key="close_processing_logs"):
+                    st.session_state.show_processing_logs = False
+                    st.rerun()
+                
+                st.markdown("---")
+
+def add_processing_log(message, log_type="info"):
+    """Add a message to the processing logs"""
+    if 'processing_logs' not in st.session_state:
+        st.session_state.processing_logs = []
+    
+    st.session_state.processing_logs.append({
+        'message': message,
+        'type': log_type,
+        'timestamp': str(datetime.now().strftime("%H:%M:%S"))
+    })
 
 def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_model, save_files, open_files, show_debug, 
                      run_diagnoses, run_medications, run_pharmacy, run_summary):
@@ -214,14 +493,19 @@ def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_mode
         st.session_state.processing_results = {}
     
     try:
+        add_processing_log("🚀 Starting document processing...", "info")
+        
         # Validate uploaded files
         valid_files = [f for f in uploaded_files if f.size > 0]
         if not valid_files:
+            add_processing_log("❌ No valid files to process. Please upload valid image files.", "error")
             st.error("❌ No valid files to process. Please upload valid image files.")
             return
         
         if len(valid_files) != len(uploaded_files):
-            st.warning(f"⚠️ Processing {len(valid_files)} valid files out of {len(uploaded_files)} uploaded.")
+            msg = f"⚠️ Processing {len(valid_files)} valid files out of {len(uploaded_files)} uploaded."
+            add_processing_log(msg, "warning")
+            st.warning(msg)
         
         # Create temporary directory for uploaded files
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -235,14 +519,18 @@ def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_mode
                     f.write(uploaded_file.getbuffer())
                 image_paths.append(str(file_path))
             
-            st.info(f"📁 Processing {len(image_paths)} image files...")
+            msg = f"📁 Processing {len(image_paths)} image files..."
+            add_processing_log(msg, "info")
+            st.info(msg)
             
             # Progress tracking
             progress_bar = st.progress(0)
             status_text = st.empty()
             
             # Step 1: OCR
-            status_text.text("🔍 Step 1/5: Processing OCR...")
+            step_msg = "🔍 Step 1/5: Processing OCR..."
+            add_processing_log(step_msg, "info")
+            status_text.text(step_msg)
             progress_bar.progress(0.2)
             
             with st.spinner("Extracting text from images..."):
@@ -253,13 +541,18 @@ def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_mode
                 
                 if save_files:
                     save_file("discharge.md", markdown)
-                    st.success("✅ Markdown saved to discharge.md")
+                    success_msg = "✅ Markdown saved to discharge.md"
+                    add_processing_log(success_msg, "success")
+                    st.success(success_msg)
                     
                     if open_files:
                         open_result = open_file_in_system("discharge.md")
-                        st.info(f"📂 {open_result}")
+                        info_msg = f"📂 {open_result}"
+                        add_processing_log(info_msg, "info")
+                        st.info(info_msg)
                 
                 st.session_state.processing_results['markdown'] = markdown
+                add_processing_log("✅ OCR processing completed successfully", "success")
             
             if show_debug:
                 with st.expander("📄 OCR Results"):
@@ -267,59 +560,78 @@ def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_mode
             
             # Step 2: Extract Diagnoses (Optional)
             if run_diagnoses:
-                status_text.text("🩺 Step 2/5: Extracting diagnoses...")
+                step_msg = "🩺 Step 2/5: Extracting diagnoses..."
+                add_processing_log(step_msg, "info")
+                status_text.text(step_msg)
                 progress_bar.progress(0.4)
                 
                 with st.spinner("Extracting medical diagnoses..."):
                     diagnoses = app_graph.run_node("ExtractDiagnoses", model=extraction_model)
                     st.session_state.processing_results['diagnoses'] = diagnoses
+                    add_processing_log("✅ Diagnoses extraction completed", "success")
                 
                 if show_debug:
                     with st.expander("🩺 Diagnosed Conditions"):
                         st.json(diagnoses)
             else:
-                st.info("⏭️ Skipping diagnoses extraction")
+                skip_msg = "⏭️ Skipping diagnoses extraction"
+                add_processing_log(skip_msg, "info")
+                st.info(skip_msg)
                 st.session_state.processing_results['diagnoses'] = None
             
             # Step 3: Extract Medications (Optional)
             if run_medications:
-                status_text.text("💊 Step 3/5: Extracting medications...")
+                step_msg = "💊 Step 3/5: Extracting medications..."
+                add_processing_log(step_msg, "info")
+                status_text.text(step_msg)
                 progress_bar.progress(0.6)
                 
                 with st.spinner("Extracting medications..."):
                     medications = app_graph.run_node("ExtractMedications", model=extraction_model)
                     st.session_state.processing_results['medications'] = medications
+                    add_processing_log("✅ Medications extraction completed", "success")
                 
                 if show_debug:
                     with st.expander("💊 Extracted Medications"):
                         st.json(medications)
             else:
-                st.info("⏭️ Skipping medications extraction")
+                skip_msg = "⏭️ Skipping medications extraction"
+                add_processing_log(skip_msg, "info")
+                st.info(skip_msg)
                 st.session_state.processing_results['medications'] = None
             
             # Step 4: Fix Medications (Optional, depends on medications)
             if run_pharmacy:
                 if run_medications:
-                    status_text.text("🔗 Step 4/5: Matching medications with PharmeEasy...")
+                    step_msg = "🔗 Step 4/5: Matching medications with PharmeEasy..."
+                    add_processing_log(step_msg, "info")
+                    status_text.text(step_msg)
                     progress_bar.progress(0.8)
                     
                     with st.spinner("Finding medication links..."):
                         fixed_medications = app_graph.run_node("FixMedications", model=pharmacy_model)
                         st.session_state.processing_results['fixed_medications'] = fixed_medications
+                        add_processing_log("✅ PharmeEasy integration completed", "success")
                     
                     if show_debug:
                         with st.expander("🔗 Medication Links"):
                             st.json(fixed_medications)
                 else:
-                    st.warning("⚠️ Cannot run PharmeEasy integration - medications extraction is disabled")
+                    warning_msg = "⚠️ Cannot run PharmeEasy integration - medications extraction is disabled"
+                    add_processing_log(warning_msg, "warning")
+                    st.warning(warning_msg)
                     st.session_state.processing_results['fixed_medications'] = None
             else:
-                st.info("⏭️ Skipping PharmeEasy integration")
+                skip_msg = "⏭️ Skipping PharmeEasy integration"
+                add_processing_log(skip_msg, "info")
+                st.info(skip_msg)
                 st.session_state.processing_results['fixed_medications'] = None
             
             # Step 5: Generate Summary (Optional)
             if run_summary:
-                status_text.text("📋 Step 5/5: Generating interactive summary...")
+                step_msg = "📋 Step 5/5: Generating interactive summary..."
+                add_processing_log(step_msg, "info")
+                status_text.text(step_msg)
                 progress_bar.progress(1.0)
                 
                 with st.spinner("Creating interactive HTML report..."):
@@ -327,24 +639,45 @@ def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_mode
                     
                     if save_files:
                         save_file("summary.html", html_summary)
-                        st.success("✅ HTML summary saved to summary.html")
+                        success_msg = "✅ HTML summary saved to summary.html"
+                        add_processing_log(success_msg, "success")
+                        st.success(success_msg)
                         
                         if open_files:
                             open_result = open_file_in_system("summary.html")
-                            st.info(f"📂 {open_result}")
+                            info_msg = f"📂 {open_result}"
+                            add_processing_log(info_msg, "info")
+                            st.info(info_msg)
                     
                     st.session_state.processing_results['html_summary'] = html_summary
+                    add_processing_log("✅ HTML summary generation completed", "success")
             else:
-                st.info("⏭️ Skipping HTML summary generation")
+                skip_msg = "⏭️ Skipping HTML summary generation"
+                add_processing_log(skip_msg, "info")
+                st.info(skip_msg)
                 st.session_state.processing_results['html_summary'] = None
             
-            status_text.text("✅ Processing completed successfully!")
+            # Final completion
+            final_msg = "✅ Processing completed successfully!"
+            add_processing_log(final_msg, "success")
+            status_text.text(final_msg)
+            
+            # Set completion state and display results
+            st.session_state.processing_completed = True
+            add_processing_log("🎉 All processing steps completed successfully!", "success")
+            
+            # Clear the progress indicators after a short delay
+            progress_bar.empty()
+            status_text.empty()
             
             # Display results
             display_results()
             
     except Exception as e:
-        st.error(f"❌ Error during processing: {str(e)}")
+        error_msg = f"❌ Error during processing: {str(e)}"
+        add_processing_log(error_msg, "error")
+        st.error(error_msg)
+        st.session_state.processing_completed = True  # Mark as completed even if failed so user can view logs
         if show_debug:
             st.exception(e)
 
@@ -443,21 +776,174 @@ def display_results():
     with tab3:
         st.subheader("Medical Diagnoses")
         if 'diagnoses' in results and results['diagnoses'] is not None:
-            st.json(results['diagnoses'])
+            diagnoses_data = results['diagnoses']
+            
+            # Summary section
+            diag_count = len(diagnoses_data.get('diagnoses', []))
+            lab_count = len(diagnoses_data.get('lab_tests', []))
+            
+            col_summary1, col_summary2, col_summary3 = st.columns(3)
+            with col_summary1:
+                st.metric("🩺 Total Diagnoses", diag_count)
+            with col_summary2:
+                st.metric("🧪 Total Lab Tests", lab_count)
+            with col_summary3:
+                st.metric("📊 Total Items", diag_count + lab_count)
+            
+            st.markdown("---")
+            
+            # Create two columns for diagnoses and lab tests
+            col_diag, col_lab = st.columns(2)
+            
+            with col_diag:
+                st.markdown("#### 🩺 Diagnoses")
+                if 'diagnoses' in diagnoses_data and diagnoses_data['diagnoses']:
+                    for i, diagnosis in enumerate(diagnoses_data['diagnoses'], 1):
+                        st.markdown(f'<div class="diagnosis-item">{i}. **{diagnosis}**</div>', unsafe_allow_html=True)
+                else:
+                    st.info("No diagnoses found")
+            
+            with col_lab:
+                st.markdown("#### 🧪 Lab Tests")
+                if 'lab_tests' in diagnoses_data and diagnoses_data['lab_tests']:
+                    for i, lab_test in enumerate(diagnoses_data['lab_tests'], 1):
+                        st.markdown(f'<div class="lab-test-item">{i}. **{lab_test}**</div>', unsafe_allow_html=True)
+                else:
+                    st.info("No lab tests found")
+            
+            # Show raw JSON data in an expander for debugging
+            with st.expander("🔍 View Raw Data (Debug)"):
+                st.json(diagnoses_data)
         else:
             st.info("⏭️ Diagnoses extraction was skipped or not available")
     
     with tab4:
         st.subheader("Extracted Medications")
         if 'medications' in results and results['medications'] is not None:
-            st.json(results['medications'])
+            medications_data = results['medications']
+            
+            # Summary metrics
+            medications_list = medications_data.get('medications', [])
+            meds_count = len(medications_list)
+            
+            col_summary1, col_summary2, col_summary3 = st.columns(3)
+            with col_summary1:
+                st.metric("💊 Total Medications", meds_count)
+            with col_summary2:
+                with_duration = len([m for m in medications_list if m.get('duration') and m.get('duration').lower() not in ['continue', 'as needed', '']])
+                st.metric("⏰ With Duration", with_duration)
+            with col_summary3:
+                as_needed = len([m for m in medications_list if m.get('duration') and 'as needed' in m.get('duration', '').lower()])
+                st.metric("🔄 As Needed", as_needed)
+            
+            st.markdown("---")
+            
+            # Display medications in cards
+            if medications_list:
+                for i, med in enumerate(medications_list, 1):
+                    with st.container():
+                        st.markdown(f"""
+                        <div class="medication-card">
+                            <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+                                <h4 style="margin: 0; color: #2E8B57;">💊 {i}. {med.get('name', 'Unknown Medication')}</h4>
+                            </div>
+                            <div style="margin-left: 1rem;">
+                                <p style="margin: 0.25rem 0;"><strong>📋 Instructions:</strong> {med.get('instructions', 'No instructions provided')}</p>
+                                <p style="margin: 0.25rem 0;"><strong>⏱️ Duration:</strong> {med.get('duration', 'Not specified')}</p>
+                            </div>
+                        </div>
+                        """, unsafe_allow_html=True)
+            else:
+                st.info("No medications found")
+            
+            # Show raw JSON data in an expander for debugging
+            with st.expander("🔍 View Raw Data (Debug)"):
+                st.json(medications_data)
         else:
             st.info("⏭️ Medications extraction was skipped or not available")
     
     with tab5:
         st.subheader("Medications with PharmeEasy Links")
         if 'fixed_medications' in results and results['fixed_medications'] is not None:
-            st.json(results['fixed_medications'])
+            fixed_medications_data = results['fixed_medications']
+            fixed_meds_list = fixed_medications_data.get('medications', [])
+            
+            # Summary metrics
+            total_meds = len(fixed_meds_list)
+            high_confidence = len([m for m in fixed_meds_list if m.get('selection_confidence', 0) > 80])
+            with_links = len([m for m in fixed_meds_list if m.get('pharmaeasy_url')])
+            no_matches = len([m for m in fixed_meds_list if len(m.get('all_products', [])) == 0])
+            
+            col_summary1, col_summary2, col_summary3, col_summary4 = st.columns(4)
+            with col_summary1:
+                st.metric("💊 Total Medications", total_meds)
+            with col_summary2:
+                st.metric("✅ High Confidence", high_confidence, help="Confidence > 80%")
+            with col_summary3:
+                st.metric("🔗 With Links", with_links)
+            with col_summary4:
+                st.metric("❌ No Matches", no_matches)
+            
+            st.markdown("---")
+            
+            # Display medications with enhanced information
+            if fixed_meds_list:
+                for i, med in enumerate(fixed_meds_list, 1):
+                    confidence = med.get('selection_confidence', 0)
+                    pharmaeasy_url = med.get('pharmaeasy_url', '')
+                    all_products = med.get('all_products', [])
+                    
+                    # Determine card color based on confidence and availability
+                    if confidence > 80:
+                        card_class = "medication-card-high"
+                    elif confidence > 50:
+                        card_class = "medication-card-medium"
+                    else:
+                        card_class = "medication-card-low"
+                    
+                    with st.container():
+                        # Main medication card
+                        st.markdown(f"""
+                        <div class="{card_class}">
+                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                <h4 style="margin: 0; color: #2E8B57;">💊 {i}. {med.get('name', 'Unknown Medication')}</h4>
+                                <span style="background: {'#28a745' if confidence > 80 else '#ffc107' if confidence > 50 else '#dc3545'}; color: white; padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">
+                                    {confidence:.0f}% confidence
+                                </span>
+                            </div>
+                            <div style="margin-left: 1rem;">
+                                <p style="margin: 0.25rem 0;"><strong>📋 Instructions:</strong> {med.get('instructions', 'No instructions provided')}</p>
+                                <p style="margin: 0.25rem 0;"><strong>⏱️ Duration:</strong> {med.get('duration', 'Not specified')}</p>
+                        """, unsafe_allow_html=True)
+                        
+                        # PharmeEasy link if available
+                        if pharmaeasy_url:
+                            st.markdown(f'<p style="margin: 0.25rem 0;"><strong>🔗 PharmeEasy:</strong> <a href="{pharmaeasy_url}" target="_blank" style="color: #007bff; text-decoration: none;">View Product</a></p>', unsafe_allow_html=True)
+                        
+                        # Alternative products if available
+                        if len(all_products) > 1:
+                            st.markdown(f'<p style="margin: 0.25rem 0;"><strong>🔄 Alternatives:</strong> {len(all_products) - 1} other options available</p>', unsafe_allow_html=True)
+                        elif len(all_products) == 0:
+                            st.markdown('<p style="margin: 0.25rem 0; color: #dc3545;"><strong>⚠️ Status:</strong> No matching products found</p>', unsafe_allow_html=True)
+                        
+                        st.markdown('</div></div>', unsafe_allow_html=True)
+                        
+                        # Show alternative products in expandable section
+                        if len(all_products) > 1:
+                            with st.expander(f"View {len(all_products)} alternative products"):
+                                for j, product in enumerate(all_products, 1):
+                                    col_prod, col_link = st.columns([3, 1])
+                                    with col_prod:
+                                        st.write(f"{j}. **{product.get('name', 'Unknown Product')}**")
+                                    with col_link:
+                                        if product.get('url'):
+                                            st.markdown(f'<a href="{product["url"]}" target="_blank" style="color: #007bff;">View</a>', unsafe_allow_html=True)
+            else:
+                st.info("No medications with pharmacy links found")
+            
+            # Show raw JSON data in an expander for debugging
+            with st.expander("🔍 View Raw Data (Debug)"):
+                st.json(fixed_medications_data)
         else:
             st.info("⏭️ PharmeEasy integration was skipped or not available")
     
@@ -507,23 +993,22 @@ def create_download_zip(results):
 def show_about():
     """Show about information"""
     st.markdown("### 🏥 About Shusrusha")
-    st.markdown("""
-    **Shusrusha** is an AI-powered medical document processing application that transforms discharge summary images 
-    into interactive, searchable HTML reports with medication links and comprehensive analysis.
-    
-        **Features:**
-        - 🔍 **Enhanced OCR**: Advanced text extraction with automatic markdown cleaning
-        - 📁 **Smart File Handling**: Auto-open saved files in default applications
-        - 🖱️ **Improved File Selection**: Native OS dialogs with multi-format support
-        - 🩺 **Medical Analysis**: AI-powered diagnosis and medication extraction
-        - 🔗 **Pharmacy Integration**: Direct links to PharmeEasy for medication ordering
-        - � **Cross-Platform**: Works on macOS, Windows, and Linux
-        - 💾 **Multiple Export Formats**: HTML, Markdown, JSON, and ZIP downloads    **Technology Stack:**
-    - LangGraph for workflow orchestration
-    - OpenAI GPT models for AI processing
-    - Streamlit for web interface
-    - PharmeEasy integration for medication data
-    """)
+    st.write("**Shusrusha** is an AI-powered medical document processing application that transforms discharge summary images into interactive, searchable HTML reports with medication links and comprehensive analysis.")
+    st.write("")
+    st.write("**Features:**")
+    st.write("- 🔍 **Enhanced OCR**: Advanced text extraction with automatic markdown cleaning")
+    st.write("- 📁 **Smart File Handling**: Auto-open saved files in default applications")
+    st.write("- 🖱️ **Improved File Selection**: Native OS dialogs with multi-format support")
+    st.write("- 🩺 **Medical Analysis**: AI-powered diagnosis and medication extraction")
+    st.write("- 🔗 **Pharmacy Integration**: Direct links to PharmeEasy for medication ordering")
+    st.write("- 🌐 **Cross-Platform**: Works on macOS, Windows, and Linux")
+    st.write("- 💾 **Multiple Export Formats**: HTML, Markdown, JSON, and ZIP downloads")
+    st.write("")
+    st.write("**Technology Stack:**")
+    st.write("- LangGraph for workflow orchestration")
+    st.write("- OpenAI GPT models for AI processing")
+    st.write("- Streamlit for web interface")
+    st.write("- PharmeEasy integration for medication data")
 
 # Sidebar navigation
 with st.sidebar:
