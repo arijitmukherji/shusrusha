@@ -482,8 +482,8 @@ def main():
                 
                 st.markdown("---")
 
-    # Display results if processing has been completed
-    if st.session_state.get('processing_completed', False) and 'processing_results' in st.session_state:
+    # Display results progressively as processing steps complete
+    if 'processing_results' in st.session_state and st.session_state.processing_results:
         display_results()
 
 def add_processing_log(message, log_type="info"):
@@ -747,233 +747,286 @@ def open_file_in_system(filename):
         return f"Could not find system command to open {filename}"
 
 def display_results():
-    """Display the processing results"""
+    """Display the processing results progressively as steps complete"""
     if 'processing_results' not in st.session_state:
         return
     
     results = st.session_state.processing_results
     
+    # Only show results header if we have any results
+    if not any(results.values()):
+        return
+    
     st.markdown('<div class="step-header"><h3>📊 Step 3: Results</h3></div>', unsafe_allow_html=True)
     
-    # Results tabs
-    tab1, tab2, tab3, tab4, tab5 = st.tabs(["📋 Summary", "📄 Markdown", "🩺 Diagnoses", "💊 Medications", "🔗 Medication Links"])
+    # Create tabs dynamically based on available results
+    available_tabs = []
+    tab_labels = []
     
-    with tab1:
-        st.subheader("Interactive HTML Summary")
-        if 'html_summary' in results and results['html_summary'] is not None:
-            # Display HTML summary
-            st.components.v1.html(results['html_summary'], height=600, scrolling=True)
-            
-            # Download button
-            st.download_button(
-                label="📥 Download HTML Report",
-                data=results['html_summary'],
-                file_name="discharge_summary.html",
-                mime="text/html",
-                use_container_width=True
-            )
-        else:
-            st.info("⏭️ HTML summary generation was skipped")
-            st.markdown("**Available data:**")
-            
-            # Show what's available
-            if 'markdown' in results and results['markdown']:
-                st.markdown("- ✅ OCR Text (available in Markdown tab)")
-            if 'diagnoses' in results and results['diagnoses']:
-                st.markdown("- ✅ Medical Diagnoses")
-            if 'medications' in results and results['medications']:
-                st.markdown("- ✅ Extracted Medications")
-            if 'fixed_medications' in results and results['fixed_medications']:
-                st.markdown("- ✅ Pharmacy Links")
+    # Always show Summary tab if we have any results
+    available_tabs.append("summary")
+    tab_labels.append("📋 Summary")
     
-    with tab2:
-        st.subheader("Extracted Text (Markdown)")
-        if 'markdown' in results:
-            st.markdown(results['markdown'])
-            
-            st.download_button(
-                label="📥 Download Markdown",
-                data=results['markdown'],
-                file_name="discharge.md",
-                mime="text/markdown",
-                use_container_width=True
-            )
+    # Show Markdown tab if OCR is complete
+    if 'markdown' in results and results['markdown']:
+        available_tabs.append("markdown")
+        tab_labels.append("📄 Markdown")
     
-    with tab3:
-        st.subheader("Medical Diagnoses")
-        if 'diagnoses' in results and results['diagnoses'] is not None:
-            diagnoses_data = results['diagnoses']
-            
-            # Summary section
-            diag_count = len(diagnoses_data.get('diagnoses', []))
-            lab_count = len(diagnoses_data.get('lab_tests', []))
-            
-            col_summary1, col_summary2, col_summary3 = st.columns(3)
-            with col_summary1:
-                st.metric("🩺 Total Diagnoses", diag_count)
-            with col_summary2:
-                st.metric("🧪 Total Lab Tests", lab_count)
-            with col_summary3:
-                st.metric("📊 Total Items", diag_count + lab_count)
-            
-            st.markdown("---")
-            
-            # Create two columns for diagnoses and lab tests
-            col_diag, col_lab = st.columns(2)
-            
-            with col_diag:
-                st.markdown("#### 🩺 Diagnoses")
-                if 'diagnoses' in diagnoses_data and diagnoses_data['diagnoses']:
-                    for i, diagnosis in enumerate(diagnoses_data['diagnoses'], 1):
-                        st.markdown(f'<div class="diagnosis-item">{i}. **{diagnosis}**</div>', unsafe_allow_html=True)
-                else:
-                    st.info("No diagnoses found")
-            
-            with col_lab:
-                st.markdown("#### 🧪 Lab Tests")
-                if 'lab_tests' in diagnoses_data and diagnoses_data['lab_tests']:
-                    for i, lab_test in enumerate(diagnoses_data['lab_tests'], 1):
-                        st.markdown(f'<div class="lab-test-item">{i}. **{lab_test}**</div>', unsafe_allow_html=True)
-                else:
-                    st.info("No lab tests found")
-            
-            # Show raw JSON data in an expander for debugging
-            with st.expander("🔍 View Raw Data (Debug)"):
-                st.json(diagnoses_data)
-        else:
-            st.info("⏭️ Diagnoses extraction was skipped or not available")
+    # Show Diagnoses tab if diagnoses extraction is complete
+    if 'diagnoses' in results and results['diagnoses'] is not None:
+        available_tabs.append("diagnoses")
+        tab_labels.append("🩺 Diagnoses")
     
-    with tab4:
-        st.subheader("Extracted Medications")
-        if 'medications' in results and results['medications'] is not None:
-            medications_data = results['medications']
-            
-            # Summary metrics
-            medications_list = medications_data.get('medications', [])
-            meds_count = len(medications_list)
-            
-            col_summary1, col_summary2, col_summary3 = st.columns(3)
-            with col_summary1:
-                st.metric("💊 Total Medications", meds_count)
-            with col_summary2:
-                with_duration = len([m for m in medications_list if m.get('duration') and m.get('duration').lower() not in ['continue', 'as needed', '']])
-                st.metric("⏰ With Duration", with_duration)
-            with col_summary3:
-                as_needed = len([m for m in medications_list if m.get('duration') and 'as needed' in m.get('duration', '').lower()])
-                st.metric("🔄 As Needed", as_needed)
-            
-            st.markdown("---")
-            
-            # Display medications in cards
-            if medications_list:
-                for i, med in enumerate(medications_list, 1):
-                    with st.container():
-                        st.markdown(f"""
-                        <div class="medication-card">
-                            <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
-                                <h4 style="margin: 0; color: #2E8B57;">💊 {i}. {med.get('name', 'Unknown Medication')}</h4>
-                            </div>
-                            <div style="margin-left: 1rem;">
-                                <p style="margin: 0.25rem 0;"><strong>⚖️ Strength:</strong> {med.get('strength', 'Not specified')}</p>
-                                <p style="margin: 0.25rem 0;"><strong>📋 Instructions:</strong> {med.get('instructions', 'No instructions provided')}</p>
-                                <p style="margin: 0.25rem 0;"><strong>⏱️ Duration:</strong> {med.get('duration', 'Not specified')}</p>
-                            </div>
-                        </div>
-                        """, unsafe_allow_html=True)
-            else:
-                st.info("No medications found")
-            
-            # Show raw JSON data in an expander for debugging
-            with st.expander("🔍 View Raw Data (Debug)"):
-                st.json(medications_data)
-        else:
-            st.info("⏭️ Medications extraction was skipped or not available")
+    # Show Medications tab if medications extraction is complete
+    if 'medications' in results and results['medications'] is not None:
+        available_tabs.append("medications")
+        tab_labels.append("💊 Medications")
     
-    with tab5:
-        st.subheader("Medications with PharmeEasy Links")
-        if 'fixed_medications' in results and results['fixed_medications'] is not None:
-            fixed_medications_data = results['fixed_medications']
-            fixed_meds_list = fixed_medications_data.get('medications', [])
-            
-            # Summary metrics
-            total_meds = len(fixed_meds_list)
-            high_confidence = len([m for m in fixed_meds_list if m.get('selection_confidence', 0) > 80])
-            with_links = len([m for m in fixed_meds_list if m.get('pharmaeasy_url')])
-            no_matches = len([m for m in fixed_meds_list if len(m.get('all_products', [])) == 0])
-            
-            col_summary1, col_summary2, col_summary3, col_summary4 = st.columns(4)
-            with col_summary1:
-                st.metric("💊 Total Medications", total_meds)
-            with col_summary2:
-                st.metric("✅ High Confidence", high_confidence, help="Confidence > 80%")
-            with col_summary3:
-                st.metric("🔗 With Links", with_links)
-            with col_summary4:
-                st.metric("❌ No Matches", no_matches)
-            
-            st.markdown("---")
-            
-            # Display medications with enhanced information
-            if fixed_meds_list:
-                for i, med in enumerate(fixed_meds_list, 1):
-                    confidence = med.get('selection_confidence', 0)
-                    pharmaeasy_url = med.get('pharmaeasy_url', '')
-                    all_products = med.get('all_products', [])
+    # Show Medication Links tab if PharmeEasy integration is complete
+    if 'fixed_medications' in results and results['fixed_medications'] is not None:
+        available_tabs.append("medication_links")
+        tab_labels.append("🔗 Medication Links")
+    
+    # Create the tabs
+    if len(available_tabs) == 1:
+        # Special case for single tab
+        tab_containers = [st.container()]
+    else:
+        tab_containers = st.tabs(tab_labels)
+    
+    # Display content for each available tab
+    for i, (tab_type, container) in enumerate(zip(available_tabs, tab_containers)):
+        with container:
+            if tab_type == "summary":
+                st.subheader("Interactive HTML Summary")
+                if 'html_summary' in results and results['html_summary'] is not None:
+                    # Display HTML summary
+                    st.components.v1.html(results['html_summary'], height=600, scrolling=True)
                     
-                    # Determine card color based on confidence and availability
-                    if confidence > 80:
-                        card_class = "medication-card-high"
-                    elif confidence > 50:
-                        card_class = "medication-card-medium"
+                    # Download button
+                    st.download_button(
+                        label="📥 Download HTML Report",
+                        data=results['html_summary'],
+                        file_name="discharge_summary.html",
+                        mime="text/html",
+                        use_container_width=True
+                    )
+                else:
+                    st.info("⏭️ HTML summary generation was skipped or in progress")
+                    st.markdown("**Available data:**")
+                    
+                    # Show what's available
+                    if 'markdown' in results and results['markdown']:
+                        st.markdown("- ✅ OCR Text (available in Markdown tab)")
+                    if 'diagnoses' in results and results['diagnoses']:
+                        st.markdown("- ✅ Medical Diagnoses")
+                    if 'medications' in results and results['medications']:
+                        st.markdown("- ✅ Extracted Medications")
+                    if 'fixed_medications' in results and results['fixed_medications']:
+                        st.markdown("- ✅ Pharmacy Links")
+                        
+            elif tab_type == "markdown":
+                st.subheader("Extracted Text (Markdown)")
+                st.markdown(results['markdown'])
+                
+                st.download_button(
+                    label="📥 Download Markdown",
+                    data=results['markdown'],
+                    file_name="discharge.md",
+                    mime="text/markdown",
+                    use_container_width=True
+                )
+                
+            elif tab_type == "diagnoses":
+                st.subheader("Medical Diagnoses")
+                if 'diagnoses' in results and results['diagnoses'] is not None:
+                    diagnoses_data = results['diagnoses']
+                    
+                    # Summary section
+                    diag_count = len(diagnoses_data.get('diagnoses', []))
+                    lab_count = len(diagnoses_data.get('lab_tests', []))
+                    
+                    col_summary1, col_summary2, col_summary3 = st.columns(3)
+                    with col_summary1:
+                        st.metric("🩺 Total Diagnoses", diag_count)
+                    with col_summary2:
+                        st.metric("🧪 Total Lab Tests", lab_count)
+                    with col_summary3:
+                        st.metric("📊 Total Items", diag_count + lab_count)
+                    
+                    st.markdown("---")
+                    
+                    # Create two columns for diagnoses and lab tests
+                    col_diag, col_lab = st.columns(2)
+                    
+                    with col_diag:
+                        st.markdown("#### 🩺 Diagnoses")
+                        if 'diagnoses' in diagnoses_data and diagnoses_data['diagnoses']:
+                            for i, diagnosis in enumerate(diagnoses_data['diagnoses'], 1):
+                                st.markdown(f'<div class="diagnosis-item">{i}. **{diagnosis}**</div>', unsafe_allow_html=True)
+                        else:
+                            st.info("No diagnoses found")
+                    
+                    with col_lab:
+                        st.markdown("#### 🧪 Lab Tests")
+                        if 'lab_tests' in diagnoses_data and diagnoses_data['lab_tests']:
+                            for i, lab_test in enumerate(diagnoses_data['lab_tests'], 1):
+                                st.markdown(f'<div class="lab-test-item">{i}. **{lab_test}**</div>', unsafe_allow_html=True)
+                        else:
+                            st.info("No lab tests found")
+                    
+                    # Show raw JSON data in an expander for debugging
+                    with st.expander("🔍 View Raw Data (Debug)"):
+                        st.json(diagnoses_data)
+                else:
+                    st.info("⏳ Diagnoses extraction in progress...")
+            
+            elif tab_type == "medications":
+                st.subheader("Extracted Medications")
+                if 'medications' in results and results['medications'] is not None:
+                    medications_data = results['medications']
+                    
+                    # Summary metrics
+                    medications_list = medications_data.get('medications', [])
+                    meds_count = len(medications_list)
+                    
+                    col_summary1, col_summary2, col_summary3 = st.columns(3)
+                    with col_summary1:
+                        st.metric("💊 Total Medications", meds_count)
+                    with col_summary2:
+                        with_duration = len([m for m in medications_list if m.get('duration') and m.get('duration').lower() not in ['continue', 'as needed', '']])
+                        st.metric("⏰ With Duration", with_duration)
+                    with col_summary3:
+                        as_needed = len([m for m in medications_list if m.get('duration') and 'as needed' in m.get('duration', '').lower()])
+                        st.metric("🔄 As Needed", as_needed)
+                    
+                    st.markdown("---")
+                    
+                    # Display medications in cards
+                    if medications_list:
+                        for i, med in enumerate(medications_list, 1):
+                            with st.container():
+                                st.markdown(f"""
+                                <div class="medication-card">
+                                    <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
+                                        <h4 style="margin: 0; color: #2E8B57;">💊 {i}. {med.get('name', 'Unknown Medication')}</h4>
+                                    </div>
+                                    <div style="margin-left: 1rem;">
+                                        <p style="margin: 0.25rem 0;"><strong>⚖️ Strength:</strong> {med.get('strength', 'Not specified')}</p>
+                                        <p style="margin: 0.25rem 0;"><strong>📋 Instructions:</strong> {med.get('instructions', 'No instructions provided')}</p>
+                                        <p style="margin: 0.25rem 0;"><strong>⏱️ Duration:</strong> {med.get('duration', 'Not specified')}</p>
+                                    </div>
+                                </div>
+                                """, unsafe_allow_html=True)
                     else:
-                        card_class = "medication-card-low"
+                        st.info("No medications found")
                     
-                    with st.container():
-                        # Main medication card
-                        st.markdown(f"""
-                        <div class="{card_class}">
-                            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                                <h4 style="margin: 0; color: #2E8B57;">💊 {i}. {med.get('name', 'Unknown Medication')}</h4>
-                                <span style="background: {'#28a745' if confidence > 80 else '#ffc107' if confidence > 50 else '#dc3545'}; color: white; padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">
-                                    {confidence:.0f}% confidence
-                                </span>
-                            </div>
-                            <div style="margin-left: 1rem;">
-                                <p style="margin: 0.25rem 0;"><strong>⚖️ Strength:</strong> {med.get('strength', 'Not specified')}</p>
-                                <p style="margin: 0.25rem 0;"><strong>📋 Instructions:</strong> {med.get('instructions', 'No instructions provided')}</p>
-                                <p style="margin: 0.25rem 0;"><strong>⏱️ Duration:</strong> {med.get('duration', 'Not specified')}</p>
-                        """, unsafe_allow_html=True)
-                        
-                        # PharmeEasy link if available
-                        if pharmaeasy_url:
-                            st.markdown(f'<p style="margin: 0.25rem 0;"><strong>🔗 PharmeEasy:</strong> <a href="{pharmaeasy_url}" target="_blank" style="color: #007bff; text-decoration: none;">View Product</a></p>', unsafe_allow_html=True)
-                        
-                        # Alternative products if available
-                        if len(all_products) > 1:
-                            st.markdown(f'<p style="margin: 0.25rem 0;"><strong>🔄 Alternatives:</strong> {len(all_products) - 1} other options available</p>', unsafe_allow_html=True)
-                        elif len(all_products) == 0:
-                            st.markdown('<p style="margin: 0.25rem 0; color: #dc3545;"><strong>⚠️ Status:</strong> No matching products found</p>', unsafe_allow_html=True)
-                        
-                        st.markdown('</div></div>', unsafe_allow_html=True)
-                        
-                        # Show alternative products in expandable section
-                        if len(all_products) > 1:
-                            with st.expander(f"View {len(all_products)} alternative products"):
-                                for j, product in enumerate(all_products, 1):
-                                    col_prod, col_link = st.columns([3, 1])
-                                    with col_prod:
-                                        st.write(f"{j}. **{product.get('name', 'Unknown Product')}**")
-                                    with col_link:
-                                        if product.get('url'):
-                                            st.markdown(f'<a href="{product["url"]}" target="_blank" style="color: #007bff;">View</a>', unsafe_allow_html=True)
-            else:
-                st.info("No medications with pharmacy links found")
+                    # Show raw JSON data in an expander for debugging
+                    with st.expander("🔍 View Raw Data (Debug)"):
+                        st.json(medications_data)
+                else:
+                    st.info("⏳ Medications extraction in progress...")
             
-            # Show raw JSON data in an expander for debugging
-            with st.expander("🔍 View Raw Data (Debug)"):
-                st.json(fixed_medications_data)
-        else:
-            st.info("⏭️ PharmeEasy integration was skipped or not available")
+            elif tab_type == "medication_links":
+                st.subheader("Medications with PharmeEasy Links")
+                if 'fixed_medications' in results and results['fixed_medications'] is not None:
+                    fixed_medications_data = results['fixed_medications']
+                    fixed_meds_list = fixed_medications_data.get('medications', [])
+                    
+                    # Summary metrics
+                    total_meds = len(fixed_meds_list)
+                    high_confidence = len([m for m in fixed_meds_list if m.get('selection_confidence', 0) > 80])
+                    with_links = len([m for m in fixed_meds_list if m.get('pharmaeasy_url')])
+                    no_matches = len([m for m in fixed_meds_list if len(m.get('all_products', [])) == 0])
+                    
+                    col_summary1, col_summary2, col_summary3, col_summary4 = st.columns(4)
+                    with col_summary1:
+                        st.metric("💊 Total Medications", total_meds)
+                    with col_summary2:
+                        st.metric("✅ High Confidence", high_confidence, help="Confidence > 80%")
+                    with col_summary3:
+                        st.metric("🔗 With Links", with_links)
+                    with col_summary4:
+                        st.metric("❌ No Matches", no_matches)
+                    
+                    st.markdown("---")
+                    
+                    # Display medications with enhanced information
+                    if fixed_meds_list:
+                        for i, med in enumerate(fixed_meds_list, 1):
+                            confidence = med.get('selection_confidence', 0)
+                            pharmaeasy_url = med.get('pharmaeasy_url', '')
+                            all_products = med.get('all_products', [])
+                            
+                            # If main pharmaeasy_url is missing but we have products, use the first product's URL
+                            if not pharmaeasy_url and all_products:
+                                pharmaeasy_url = all_products[0].get('url', '')
+                            
+                            # Determine card color based on confidence and availability
+                            if confidence > 80:
+                                card_class = "medication-card-high"
+                            elif confidence > 50:
+                                card_class = "medication-card-medium"
+                            else:
+                                card_class = "medication-card-low"
+                            
+                            with st.container():
+                                # Main medication card
+                                st.markdown(f"""
+                                <div class="{card_class}">
+                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                                        <h4 style="margin: 0; color: #2E8B57;">💊 {i}. {med.get('name', 'Unknown Medication')}</h4>
+                                        <span style="background: {'#28a745' if confidence > 80 else '#ffc107' if confidence > 50 else '#dc3545'}; color: white; padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">
+                                            {confidence:.0f}% confidence
+                                        </span>
+                                    </div>
+                                    <div style="margin-left: 1rem;">
+                                        <p style="margin: 0.25rem 0;"><strong>⚖️ Strength:</strong> {med.get('strength', 'Not specified')}</p>
+                                        <p style="margin: 0.25rem 0;"><strong>📋 Instructions:</strong> {med.get('instructions', 'No instructions provided')}</p>
+                                        <p style="margin: 0.25rem 0;"><strong>⏱️ Duration:</strong> {med.get('duration', 'Not specified')}</p>
+                                """, unsafe_allow_html=True)
+                                
+                                # PharmeEasy link if available
+                                if pharmaeasy_url:
+                                    st.markdown(f'<p style="margin: 0.25rem 0;"><strong>🔗 PharmeEasy:</strong> <a href="{pharmaeasy_url}" target="_blank" style="color: #007bff; text-decoration: none;">View Product</a></p>', unsafe_allow_html=True)
+                                else:
+                                    st.markdown('<p style="margin: 0.25rem 0; color: #dc3545;"><strong>⚠️ PharmeEasy:</strong> No direct link available</p>', unsafe_allow_html=True)
+                                
+                                # Alternative products if available
+                                total_products = len(all_products)
+                                if total_products > 0:
+                                    st.markdown(f'<p style="margin: 0.25rem 0;"><strong>🔄 Available Options:</strong> {total_products} product(s) found</p>', unsafe_allow_html=True)
+                                else:
+                                    st.markdown('<p style="margin: 0.25rem 0; color: #dc3545;"><strong>⚠️ Status:</strong> No matching products found</p>', unsafe_allow_html=True)
+                                
+                                st.markdown('</div></div>', unsafe_allow_html=True)
+                                
+                                # Show all products in expandable section
+                                if total_products > 0:
+                                    with st.expander(f"View all {total_products} available product(s)"):
+                                        for j, product in enumerate(all_products, 1):
+                                            col_prod, col_link = st.columns([3, 1])
+                                            with col_prod:
+                                                product_name = product.get('name', 'Unknown Product')
+                                                # Highlight the selected/main product
+                                                if j == 1:  # Assuming first product is the selected one
+                                                    st.write(f"{j}. **{product_name}** ⭐ *(Selected)*")
+                                                else:
+                                                    st.write(f"{j}. **{product_name}**")
+                                            with col_link:
+                                                product_url = product.get('url', '')
+                                                if product_url:
+                                                    st.markdown(f'<a href="{product_url}" target="_blank" style="color: #007bff;">View</a>', unsafe_allow_html=True)
+                                                else:
+                                                    st.write("No link")
+                    else:
+                        st.info("No medications with pharmacy links found")
+                    
+                    # Show raw JSON data in an expander for debugging
+                    with st.expander("🔍 View Raw Data (Debug)"):
+                        st.json(fixed_medications_data)
+                else:
+                    st.info("⏳ PharmeEasy integration in progress...")
     
     # Download all files as ZIP
     if st.button("📦 Download All Files as ZIP", use_container_width=True):
