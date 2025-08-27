@@ -220,7 +220,7 @@ def main():
         col1, col2 = st.columns(2)
         with col1:
             run_diagnoses = st.checkbox("🩺 Extract Diagnoses", value=True, help="Extract medical conditions and diagnoses")
-            run_medications = st.checkbox("💊 Extract Medications", value=True, help="Extract prescribed medications")
+            run_medications = st.checkbox("💊 Extract Medications", value=True, help="Extract medication names, strengths, instructions and duration")
         
         with col2:
             run_pharmacy = st.checkbox("🔗 PharmeEasy Integration", value=True, help="Match medications with pharmacy links")
@@ -594,7 +594,7 @@ def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_mode
             
             # Step 3: Extract Medications (Optional)
             if run_medications:
-                step_msg = "💊 Step 3/5: Extracting medications..."
+                step_msg = "💊 Step 3/5: Extracting medications with strength and dosage..."
                 add_processing_log(step_msg, "info")
                 status_text.text(step_msg)
                 progress_bar.progress(0.6)
@@ -874,6 +874,7 @@ def display_results():
                                 <h4 style="margin: 0; color: #2E8B57;">💊 {i}. {med.get('name', 'Unknown Medication')}</h4>
                             </div>
                             <div style="margin-left: 1rem;">
+                                <p style="margin: 0.25rem 0;"><strong>⚖️ Strength:</strong> {med.get('strength', 'Not specified')}</p>
                                 <p style="margin: 0.25rem 0;"><strong>📋 Instructions:</strong> {med.get('instructions', 'No instructions provided')}</p>
                                 <p style="margin: 0.25rem 0;"><strong>⏱️ Duration:</strong> {med.get('duration', 'Not specified')}</p>
                             </div>
@@ -938,6 +939,7 @@ def display_results():
                                 </span>
                             </div>
                             <div style="margin-left: 1rem;">
+                                <p style="margin: 0.25rem 0;"><strong>⚖️ Strength:</strong> {med.get('strength', 'Not specified')}</p>
                                 <p style="margin: 0.25rem 0;"><strong>📋 Instructions:</strong> {med.get('instructions', 'No instructions provided')}</p>
                                 <p style="margin: 0.25rem 0;"><strong>⏱️ Duration:</strong> {med.get('duration', 'Not specified')}</p>
                         """, unsafe_allow_html=True)

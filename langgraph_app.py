@@ -151,8 +151,8 @@ def extract_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> G
     markdown_text = state.get("markdown", "")
     
     system_prompt = """You are an expert medical doctor practising in Kolkata India. You have been given a hospital discharge report of a patient in simple mardown text format. Your job is to identify all the relevant medication names from the document along with instructions. In case of difficulty identifying a medication name, make sure the names match actual medications used in that part of the world. Return a JSON structure of the form
-{"medications": [{"name":"medicine_1", "instructions":"Twice daily", "duration":"continue"}, {"name":"medicine_2", "instructions":"as needed", "duration":"as needed"}, {"name":"medicine_3", "instructions":"BID", "duration":"10 days"}]}"""
-    
+{"medications": [{"name":"medicine_1", "strength":"5 mg", "instructions":"Twice daily", "duration":"continue"}, {"name":"medicine_2", "strength":"10 ml", "instructions":"as needed", "duration":"as needed"}, {"name":"medicine_3", "strength":"1 pouch", "instructions":"BID", "duration":"10 days"}]}"""
+
     client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
     
     try:
