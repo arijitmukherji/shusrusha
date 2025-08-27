@@ -7,8 +7,12 @@ Dockerfile*
 docker-compose*
 .dockerignore
 
-# Streamlit secrets (use environment variables in Docker)
+# Secrets and environment files (for security)
 .streamlit/secrets.toml
+.streamlit/secrets.*
+*.env
+.env*
+secrets.*
 
 # Python
 __pycache__
