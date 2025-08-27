@@ -7,6 +7,10 @@ import json
 import requests
 import re
 from urllib.parse import quote
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import threading
+import time
+import random
 
 # Define the state structure
 class GraphState(TypedDict):
@@ -16,6 +20,27 @@ class GraphState(TypedDict):
     medications: Dict[str, Any]
     fixed_medications: Dict[str, Any]
     html_summary: str
+
+# Thread-safe rate limiter for API calls
+class RateLimiter:
+    def __init__(self, max_calls_per_second=2):
+        self.max_calls_per_second = max_calls_per_second
+        self.min_interval = 1.0 / max_calls_per_second
+        self.last_call_time = 0
+        self.lock = threading.Lock()
+    
+    def wait_if_needed(self):
+        with self.lock:
+            current_time = time.time()
+            time_since_last_call = current_time - self.last_call_time
+            if time_since_last_call < self.min_interval:
+                sleep_time = self.min_interval - time_since_last_call
+                time.sleep(sleep_time)
+            self.last_call_time = time.time()
+
+# Global rate limiters
+pharmeasy_rate_limiter = RateLimiter(max_calls_per_second=1)  # Very conservative for web scraping
+openai_rate_limiter = RateLimiter(max_calls_per_second=10)    # OpenAI can handle more
 
 def get_openai_params(model: str, messages: list, max_tokens: int = 2048, temperature: float = 0.1, use_json_format: bool = True) -> dict:
     """
@@ -177,47 +202,103 @@ def extract_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> G
     state["medications"] = medications_json
     return state
 
-def fetch_pharmeasy_content(medicine_name: str) -> str:
+def fetch_pharmeasy_content(medicine_name: str, max_retries: int = 3) -> str:
     """
-    Fetch the HTML content from PharmeEasy search page.
+    Fetch the HTML content from PharmeEasy search page with rate limiting and retry logic.
     """
-    try:
-        encoded_medicine = quote(medicine_name)
-        search_url = f"https://pharmeasy.in/search/all?name={encoded_medicine}"
+    for attempt in range(max_retries):
+        try:
+            # Rate limiting to avoid being blocked
+            pharmeasy_rate_limiter.wait_if_needed()
+            
+            # Add random delay to avoid looking like a bot
+            if attempt > 0:
+                delay = random.uniform(1, 3)
+                print(f"Retry {attempt + 1} for {medicine_name}, waiting {delay:.1f}s...")
+                time.sleep(delay)
+            
+            encoded_medicine = quote(medicine_name)
+            search_url = f"https://pharmeasy.in/search/all?name={encoded_medicine}"
+            
+            # Create a fresh session for each request to avoid connection issues
+            session = requests.Session()
+            
+            headers = {
+                'User-Agent': f'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+                'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+                'Accept-Language': 'en-US,en;q=0.5',
+                'Accept-Encoding': 'gzip, deflate, br',
+                'Connection': 'keep-alive',
+                'Upgrade-Insecure-Requests': '1',
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+            }
+            session.headers.update(headers)
+            
+            print(f"Fetching: {search_url} (attempt {attempt + 1})")
+            
+            response = session.get(
+                search_url, 
+                timeout=20,  # Increased timeout
+                allow_redirects=True
+            )
+            
+            # Check for rate limiting or blocking
+            if response.status_code == 429:
+                print(f"Rate limited for {medicine_name}, waiting before retry...")
+                time.sleep(5)
+                continue
+            elif response.status_code == 403:
+                print(f"Access forbidden for {medicine_name}, trying with different headers...")
+                # Try with different user agent
+                headers['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                session.headers.update(headers)
+                continue
+            
+            response.raise_for_status()
+            
+            content = response.text
+            print(f"Successfully fetched {len(content)} characters from PharmeEasy for {medicine_name}")
+            
+            # Close the session
+            session.close()
+            
+            return content
+            
+        except requests.exceptions.Timeout:
+            print(f"Timeout error for {medicine_name} (attempt {attempt + 1})")
+        except requests.exceptions.ConnectionError:
+            print(f"Connection error for {medicine_name} (attempt {attempt + 1})")
+        except requests.exceptions.RequestException as e:
+            print(f"Request error for {medicine_name} (attempt {attempt + 1}): {e}")
+        except Exception as e:
+            print(f"Unexpected error fetching {medicine_name} (attempt {attempt + 1}): {e}")
         
-        headers = {
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-            'Accept-Language': 'en-US,en;q=0.5',
-            'Accept-Encoding': 'gzip, deflate, br',
-            'Connection': 'keep-alive',
-        }
-        
-        print(f"Fetching: {search_url}")
-        
-        session = requests.Session()
-        session.headers.update(headers)
-        
-        response = session.get(search_url, timeout=15, allow_redirects=True)
-        response.raise_for_status()
-        
-        content = response.text
-        print(f"Fetched {len(content)} characters from PharmeEasy")
-        
-        return content
-        
-    except Exception as e:
-        print(f"Error fetching PharmeEasy content: {e}")
-        return ""
+        # Close session if it exists
+        try:
+            session.close()
+        except:
+            pass
+    
+    print(f"Failed to fetch content for {medicine_name} after {max_retries} attempts")
+    return ""
 
-def parse_pharmeasy_products(html_content: str, model: str = "gpt-4o-mini") -> List[Dict[str, str]]:
+def parse_pharmeasy_products(html_content: str, model: str = "gpt-4o-mini", max_retries: int = 3) -> List[Dict[str, str]]:
     """
-    Use LLM to parse PharmeEasy HTML and extract product listings.
+    Use LLM to parse PharmeEasy HTML and extract product listings with retry logic.
     """
-    try:
-        client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-        
-        system_prompt = """You are an expert web scraper. Parse this HTML content from Pharmeasy.in search results.
+    for attempt in range(max_retries):
+        try:
+            # Rate limiting for OpenAI API
+            openai_rate_limiter.wait_if_needed()
+            
+            if attempt > 0:
+                print(f"Retrying OpenAI API call for HTML parsing (attempt {attempt + 1})")
+                time.sleep(random.uniform(0.5, 1.5))
+            
+            client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            
+            system_prompt = """You are an expert web scraper. Parse this HTML content from Pharmeasy.in search results.
 
 Look for product listings in the main body of the page and extract up to 10 products. For each product, extract:
 - name: The product name/title
@@ -233,48 +314,59 @@ Return JSON format:
 {"products": [{"name": "Product Name 1", "url": "https://pharmeasy.in/online-medicine-order/..."}, {"name": "Product Name 2", "url": "https://pharmeasy.in/..."}, ...]}
 
 If no products found, return empty products array."""
-        
-        # Truncate content to manageable size
-        max_length = 15000
-        if len(html_content) > max_length:
-            # Keep beginning and middle sections which likely contain products
-            start_chunk = html_content[:5000]
-            middle_start = len(html_content) // 3
-            middle_chunk = html_content[middle_start:middle_start + 10000]
-            html_content = start_chunk + "\n... [content truncated] ...\n" + middle_chunk
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Parse this PharmeEasy HTML and extract product listings:\n\n{html_content}"}
-        ]
-        
-        api_params = get_openai_params(model, messages, max_tokens=2048, use_json_format=True)
-        response = client.chat.completions.create(**api_params)
-        
-        result = json.loads(response.choices[0].message.content)
-        products = result.get("products", [])
-        
-        # Clean up URLs
-        cleaned_products = []
-        for product in products:
-            url = product.get("url", "")
-            if url.startswith("/"):
-                url = "https://pharmeasy.in" + url
-            elif not url.startswith("http") and url:
-                url = "https://pharmeasy.in/" + url
             
-            if product.get("name") and url:
-                cleaned_products.append({
-                    "name": product["name"],
-                    "url": url
-                })
-        
-        print(f"Extracted {len(cleaned_products)} products from PharmeEasy page")
-        return cleaned_products
-        
-    except Exception as e:
-        print(f"Error parsing Pharmeasy HTML: {e}")
-        return []
+            # Truncate content to manageable size
+            max_length = 15000
+            if len(html_content) > max_length:
+                # Keep beginning and middle sections which likely contain products
+                start_chunk = html_content[:5000]
+                middle_start = len(html_content) // 3
+                middle_chunk = html_content[middle_start:middle_start + 10000]
+                html_content = start_chunk + "\n... [content truncated] ...\n" + middle_chunk
+            
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"Parse this PharmeEasy HTML and extract product listings:\n\n{html_content}"}
+            ]
+            
+            api_params = get_openai_params(model, messages, max_tokens=2048, use_json_format=True)
+            response = client.chat.completions.create(**api_params)
+            
+            result = json.loads(response.choices[0].message.content)
+            products = result.get("products", [])
+            
+            # Clean up URLs
+            cleaned_products = []
+            for product in products:
+                url = product.get("url", "")
+                if url.startswith("/"):
+                    url = "https://pharmeasy.in" + url
+                elif not url.startswith("http") and url:
+                    url = "https://pharmeasy.in/" + url
+                
+                if product.get("name") and url:
+                    cleaned_products.append({
+                        "name": product["name"],
+                        "url": url
+                    })
+            
+            print(f"Extracted {len(cleaned_products)} products from PharmeEasy page")
+            return cleaned_products
+            
+        except openai.RateLimitError:
+            print(f"OpenAI rate limit hit, waiting before retry (attempt {attempt + 1})")
+            time.sleep(2 ** attempt)  # Exponential backoff
+        except openai.APIError as e:
+            print(f"OpenAI API error in HTML parsing (attempt {attempt + 1}): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(1)
+        except json.JSONDecodeError as e:
+            print(f"JSON decode error in HTML parsing (attempt {attempt + 1}): {e}")
+        except Exception as e:
+            print(f"Unexpected error in HTML parsing (attempt {attempt + 1}): {e}")
+    
+    print(f"Failed to parse PharmeEasy HTML after {max_retries} attempts")
+    return []
 
 def wrap_medication_items_in_lists(html_content: str) -> str:
     """
@@ -781,15 +873,23 @@ def generate_medications_table(fixed_medications: Dict[str, Any]) -> str:
     
     return table_html
 
-def select_best_product_match(medicine_name: str, products: List[Dict[str, str]], diagnoses: List[str], model: str = "gpt-4o-mini") -> Dict[str, Any]:
+def select_best_product_match(medicine_name: str, products: List[Dict[str, str]], diagnoses: List[str], model: str = "gpt-4o-mini", max_retries: int = 3) -> Dict[str, Any]:
     """
     Use LLM to select the best matching product based on medicine name similarity, 
-    diagnoses relevance, drug category, strength, etc.
+    diagnoses relevance, drug category, strength, etc. with retry logic.
     """
-    try:
-        client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-        
-        system_prompt = """You are an expert pharmacist practicing in India. Your job is to select the best matching medication product from a list of options.
+    for attempt in range(max_retries):
+        try:
+            # Rate limiting for OpenAI API
+            openai_rate_limiter.wait_if_needed()
+            
+            if attempt > 0:
+                print(f"Retrying product selection for {medicine_name} (attempt {attempt + 1})")
+                time.sleep(random.uniform(0.5, 1.5))
+            
+            client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            
+            system_prompt = """You are an expert pharmacist practicing in India. Your job is to select the best matching medication product from a list of options.
 
 Consider these factors when selecting the best match:
 1. NAME SIMILARITY: How closely does the product name match the original medicine name? Either fully
@@ -821,17 +921,17 @@ Return your analysis in JSON format:
 }
 
 If no good match is found, set selected_product_index to -1."""
-        
-        # Prepare the product list for analysis
-        products_text = ""
-        for i, product in enumerate(products):
-            products_text += f"{i}. {product['name']} - {product['url']}\n"
-        
-        diagnoses_text = ", ".join(diagnoses) if diagnoses else "No specific diagnoses provided"
-        
-        messages = [
-            {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"""Please analyze and select the best matching product:
+            
+            # Prepare the product list for analysis
+            products_text = ""
+            for i, product in enumerate(products):
+                products_text += f"{i}. {product['name']} - {product['url']}\n"
+            
+            diagnoses_text = ", ".join(diagnoses) if diagnoses else "No specific diagnoses provided"
+            
+            messages = [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": f"""Please analyze and select the best matching product:
 
 Original medicine name: {medicine_name}
 Patient diagnoses: {diagnoses_text}
@@ -840,174 +940,286 @@ Available products:
 {products_text}
 
 Select the best match considering name similarity, appropriateness for the diagnoses, dosage strength, and common medical practice in India. Pay special attention to accurate name similarity scoring."""}
-        ]
-        
-        api_params = get_openai_params(model, messages, max_tokens=1024, use_json_format=True)
-        response = client.chat.completions.create(**api_params)
-        
-        result = json.loads(response.choices[0].message.content)
-        
-        selected_index = result.get("selected_product_index", -1)
-        
-        if selected_index >= 0 and selected_index < len(products):
-            return {
-                "product": products[selected_index],
-                "analysis": result,
-                "success": True
-            }
-        else:
-            return {
-                "product": None,
-                "analysis": result,
-                "success": False
-            }
+            ]
             
+            api_params = get_openai_params(model, messages, max_tokens=1024, use_json_format=True)
+            response = client.chat.completions.create(**api_params)
+            
+            result = json.loads(response.choices[0].message.content)
+            
+            selected_index = result.get("selected_product_index", -1)
+            
+            if selected_index >= 0 and selected_index < len(products):
+                return {
+                    "product": products[selected_index],
+                    "analysis": result,
+                    "success": True
+                }
+            else:
+                return {
+                    "product": None,
+                    "analysis": result,
+                    "success": False
+                }
+                
+        except openai.RateLimitError:
+            print(f"OpenAI rate limit hit for product selection of {medicine_name}, waiting before retry (attempt {attempt + 1})")
+            time.sleep(2 ** attempt)  # Exponential backoff
+        except openai.APIError as e:
+            print(f"OpenAI API error in product selection for {medicine_name} (attempt {attempt + 1}): {e}")
+            if attempt < max_retries - 1:
+                time.sleep(1)
+        except json.JSONDecodeError as e:
+            print(f"JSON decode error in product selection for {medicine_name} (attempt {attempt + 1}): {e}")
+        except Exception as e:
+            print(f"Unexpected error in product selection for {medicine_name} (attempt {attempt + 1}): {e}")
+    
+    print(f"Failed to select product for {medicine_name} after {max_retries} attempts")
+    return {
+        "product": products[0] if products else None,
+        "analysis": {"reasoning": f"Error in selection after {max_retries} attempts, using first product", "name_similarity": "unknown"},
+        "success": False
+    }
+
+def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[str], model: str, medication_index: int) -> Dict[str, Any]:
+    """
+    Process a single medication to find matching products on PharmeEasy.
+    This function is designed to be run in parallel.
+    """
+    medicine_name = medication.get('name', 'Unknown')
+    print(f"\n--- Processing medication {medication_index + 1}: {medicine_name} ---")
+    
+    try:
+        # Fetch Pharmeasy page content
+        html_content = fetch_pharmeasy_content(medicine_name)
+        
+        # Create enhanced medication object
+        medication_copy = medication.copy()
+        
+        if html_content:
+            # Parse products from the HTML
+            products = parse_pharmeasy_products(html_content, model)
+            
+            if products:
+                print(f"Found {len(products)} products, selecting best match...")
+                
+                # Use LLM to select the best matching product
+                selection_result = select_best_product_match(
+                    medicine_name, 
+                    products, 
+                    diagnoses_list, 
+                    model
+                )
+                
+                if selection_result["success"] and selection_result["product"]:
+                    primary_product = selection_result["product"]
+                    analysis = selection_result["analysis"]
+                    
+                    medication_copy.update({
+                        "url": primary_product["url"],
+                        "pharmeasy_name": primary_product["name"],
+                        "all_products": products[:10],  # Store up to 10 products
+                        "selection_confidence": analysis.get("confidence_score", 0),
+                        "selection_reasoning": analysis.get("reasoning", ""),
+                        "name_similarity": analysis.get("name_similarity", "unknown"),
+                        "dosage_appropriateness": analysis.get("dosage_appropriateness", "unknown"),
+                        "category_match": analysis.get("category_match", "unknown")
+                    })
+                    
+                    # Check if name differs significantly
+                    original_lower = medicine_name.lower()
+                    pharmeasy_lower = primary_product["name"].lower()
+                    
+                    if original_lower not in pharmeasy_lower and pharmeasy_lower not in original_lower:
+                        medication_copy["modified_name"] = primary_product["name"]
+                        medication_copy["reason"] = f"LLM selected best match: {primary_product['name']} (confidence: {analysis.get('confidence_score', 0)}%)"
+                    
+                    print(f"✓ LLM selected: {primary_product['name']}")
+                    print(f"  Confidence: {analysis.get('confidence_score', 0)}%")
+                    print(f"  Reasoning: {analysis.get('reasoning', 'No reasoning provided')[:100]}...")
+                    
+                    # Show alternative suggestions if available
+                    alternatives = analysis.get("alternative_suggestions", [])
+                    if alternatives:
+                        alt_names = []
+                        for alt_idx in alternatives:
+                            if isinstance(alt_idx, int) and 0 <= alt_idx < len(products):
+                                alt_names.append(products[alt_idx]["name"])
+                        if alt_names:
+                            print(f"  Alternatives: {', '.join(alt_names[:2])}")
+                
+                else:
+                    # LLM couldn't find a good match, use first product as fallback
+                    primary_product = products[0]
+                    analysis = selection_result["analysis"]
+                    
+                    medication_copy.update({
+                        "url": primary_product["url"],
+                        "pharmeasy_name": primary_product["name"],
+                        "all_products": products[:10],
+                        "selection_confidence": 0,
+                        "selection_reasoning": analysis.get("reasoning", "No good match found, using first result"),
+                        "modified_name": primary_product["name"],
+                        "reason": f"No good match found (LLM analysis), using: {primary_product['name']}"
+                    })
+                    
+                    print(f"⚠ LLM found no good match, using first result: {primary_product['name']}")
+                    print(f"  Reasoning: {analysis.get('reasoning', 'No reasoning provided')}")
+            
+            else:
+                # No products found in parsed content
+                fallback_url = f"https://pharmeasy.in/search/all?name={medicine_name.replace(' ', '%20')}"
+                medication_copy.update({
+                    "url": fallback_url,
+                    "reason": "No products found in page content, using search URL",
+                    "all_products": [],
+                    "selection_confidence": 0
+                })
+                print(f"✗ No products extracted from page content")
+        else:
+            # Failed to fetch content
+            fallback_url = f"https://pharmeasy.in/search/all?name={medicine_name.replace(' ', '%20')}"
+            medication_copy.update({
+                "url": fallback_url,
+                "reason": "Failed to fetch page content, using search URL",
+                "all_products": [],
+                "selection_confidence": 0
+            })
+            print(f"✗ Failed to fetch page content")
+        
+        return medication_copy
+        
     except Exception as e:
-        print(f"Error in product selection: {e}")
-        return {
-            "product": products[0] if products else None,
-            "analysis": {"reasoning": f"Error in selection, using first product: {str(e)}", "name_similarity": "unknown"},
-            "success": False
-        }
+        print(f"✗ Error processing {medicine_name}: {e}")
+        # Fallback for this medication
+        medication_copy = medication.copy()
+        fallback_url = f"https://pharmeasy.in/search/all?name={medicine_name.replace(' ', '%20')}"
+        medication_copy.update({
+            "url": fallback_url,
+            "reason": f"Error during processing: {str(e)}",
+            "all_products": [],
+            "selection_confidence": 0
+        })
+        return medication_copy
 
 def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
     """
     Fetch Pharmeasy content for each medication and use LLM to select the best matching product.
+    Uses parallel processing to significantly reduce processing time.
     """
     medications_data = state.get("medications", {"medications": []})
     diagnoses_data = state.get("diagnoses", {"diagnoses": [], "lab_tests": []})
     diagnoses_list = diagnoses_data.get("diagnoses", [])
     
+    medications_list = medications_data.get("medications", [])
+    
+    if not medications_list:
+        print("No medications to process")
+        state["fixed_medications"] = {"medications": []}
+        return state
+    
+    print(f"\n=== Fix Medications Node - Parallel Processing (Model: {model}) ===")
+    print(f"Processing {len(medications_list)} medications in parallel...")
+    
+    # Use ThreadPoolExecutor for parallel processing
+    # Reduced concurrency to avoid rate limiting and race conditions
+    max_workers = min(2, len(medications_list))  # Max 2 concurrent requests to be more conservative
     fixed_medications_list = []
     
-    for i, medication in enumerate(medications_data.get("medications", [])):
-        medicine_name = medication.get('name', 'Unknown')
-        print(f"\n--- Processing medication {i+1}: {medicine_name} ---")
+    with ThreadPoolExecutor(max_workers=max_workers) as executor:
+        # Submit all medication processing tasks
+        future_to_index = {}
+        for i, medication in enumerate(medications_list):
+            future = executor.submit(
+                process_single_medication, 
+                medication, 
+                diagnoses_list, 
+                model, 
+                i
+            )
+            future_to_index[future] = i
         
-        try:
-            # Fetch Pharmeasy page content
-            html_content = fetch_pharmeasy_content(medicine_name)
-            
-            if html_content:
-                # Parse products from the HTML
-                products = parse_pharmeasy_products(html_content, model)
+        # Collect results as they complete
+        results = [None] * len(medications_list)  # Pre-allocate list to maintain order
+        completed_count = 0
+        failed_count = 0
+        
+        for future in as_completed(future_to_index):
+            index = future_to_index[future]
+            try:
+                result = future.result(timeout=120)  # 2 minute timeout per medication
+                results[index] = result
+                completed_count += 1
                 
-                # Create enhanced medication object
-                medication_copy = medication.copy()
+                # Progress indicator
+                medicine_name = result.get('name', 'Unknown')
+                confidence = result.get('selection_confidence', 0)
+                product_count = len(result.get('all_products', []))
+                status = "✓" if product_count > 0 else "✗"
                 
-                if products:
-                    print(f"Found {len(products)} products, selecting best match...")
-                    
-                    # Use LLM to select the best matching product
-                    selection_result = select_best_product_match(
-                        medicine_name, 
-                        products, 
-                        diagnoses_list, 
-                        model
-                    )
-                    
-                    if selection_result["success"] and selection_result["product"]:
-                        primary_product = selection_result["product"]
-                        analysis = selection_result["analysis"]
-                        
-                        medication_copy.update({
-                            "url": primary_product["url"],
-                            "pharmeasy_name": primary_product["name"],
-                            "all_products": products[:10],  # Store up to 10 products
-                            "selection_confidence": analysis.get("confidence_score", 0),
-                            "selection_reasoning": analysis.get("reasoning", ""),
-                            "name_similarity": analysis.get("name_similarity", "unknown"),
-                            "dosage_appropriateness": analysis.get("dosage_appropriateness", "unknown"),
-                            "category_match": analysis.get("category_match", "unknown")
-                        })
-                        
-                        # Check if name differs significantly
-                        original_lower = medicine_name.lower()
-                        pharmeasy_lower = primary_product["name"].lower()
-                        
-                        if original_lower not in pharmeasy_lower and pharmeasy_lower not in original_lower:
-                            medication_copy["modified_name"] = primary_product["name"]
-                            medication_copy["reason"] = f"LLM selected best match: {primary_product['name']} (confidence: {analysis.get('confidence_score', 0)}%)"
-                        
-                        print(f"✓ LLM selected: {primary_product['name']}")
-                        print(f"  Confidence: {analysis.get('confidence_score', 0)}%")
-                        print(f"  Reasoning: {analysis.get('reasoning', 'No reasoning provided')[:100]}...")
-                        
-                        # Show alternative suggestions if available
-                        alternatives = analysis.get("alternative_suggestions", [])
-                        if alternatives:
-                            alt_names = []
-                            for alt_idx in alternatives:
-                                if isinstance(alt_idx, int) and 0 <= alt_idx < len(products):
-                                    alt_names.append(products[alt_idx]["name"])
-                            if alt_names:
-                                print(f"  Alternatives: {', '.join(alt_names[:2])}")
-                    
-                    else:
-                        # LLM couldn't find a good match, use first product as fallback
-                        primary_product = products[0]
-                        analysis = selection_result["analysis"]
-                        
-                        medication_copy.update({
-                            "url": primary_product["url"],
-                            "pharmeasy_name": primary_product["name"],
-                            "all_products": products[:10],
-                            "selection_confidence": 0,
-                            "selection_reasoning": analysis.get("reasoning", "No good match found, using first result"),
-                            "modified_name": primary_product["name"],
-                            "reason": f"No good match found (LLM analysis), using: {primary_product['name']}"
-                        })
-                        
-                        print(f"⚠ LLM found no good match, using first result: {primary_product['name']}")
-                        print(f"  Reasoning: {analysis.get('reasoning', 'No reasoning provided')}")
-                
+                if product_count > 0:
+                    print(f"[{completed_count}/{len(medications_list)}] {status} {medicine_name} - {confidence}% confidence ({product_count} products)")
                 else:
-                    # No products found in parsed content
-                    fallback_url = f"https://pharmeasy.in/search/all?name={medicine_name.replace(' ', '%20')}"
-                    medication_copy.update({
-                        "url": fallback_url,
-                        "reason": "No products found in page content, using search URL",
-                        "all_products": [],
-                        "selection_confidence": 0
-                    })
-                    print(f"✗ No products extracted from page content")
-            else:
-                # Failed to fetch content
+                    print(f"[{completed_count}/{len(medications_list)}] {status} {medicine_name} - No products found")
+                
+            except Exception as e:
+                failed_count += 1
+                print(f"✗ Error processing medication at index {index}: {e}")
+                # Create fallback result
+                original_medication = medications_list[index]
+                medicine_name = original_medication.get('name', 'Unknown')
                 fallback_url = f"https://pharmeasy.in/search/all?name={medicine_name.replace(' ', '%20')}"
-                medication_copy = medication.copy()
-                medication_copy.update({
+                fallback_result = original_medication.copy()
+                fallback_result.update({
                     "url": fallback_url,
-                    "reason": "Failed to fetch page content, using search URL",
+                    "reason": f"Parallel processing error: {str(e)}",
                     "all_products": [],
-                    "selection_confidence": 0
+                    "selection_confidence": 0,
+                    "pharmeasy_name": "Error - fallback URL"
                 })
-                print(f"✗ Failed to fetch page content")
-            
-            fixed_medications_list.append(medication_copy)
-            
-        except Exception as e:
-            print(f"✗ Error processing {medicine_name}: {e}")
-            # Fallback for this medication
-            medication_copy = medication.copy()
-            fallback_url = f"https://pharmeasy.in/search/all?name={medicine_name.replace(' ', '%20')}"
-            medication_copy.update({
-                "url": fallback_url,
-                "reason": f"Error during processing: {str(e)}",
-                "all_products": [],
-                "selection_confidence": 0
-            })
-            fixed_medications_list.append(medication_copy)
+                results[index] = fallback_result
+                completed_count += 1
+    
+    # Filter out any None results (shouldn't happen, but safety check)
+    fixed_medications_list = [result for result in results if result is not None]
     
     fixed_medications_json = {"medications": fixed_medications_list}
     
-    print(f"\n=== Fix Medications Node Output (Model: {model}) ===")
-    print(f"Processed {len(fixed_medications_list)} medications")
+    print(f"\n=== Parallel Processing Complete (Model: {model}) ===")
+    print(f"Processed {len(fixed_medications_list)} medications using {max_workers} parallel workers")
+    
+    if failed_count > 0:
+        print(f"⚠️ {failed_count} medications failed during processing and used fallback URLs")
+    
+    # Summary statistics
+    successful_matches = sum(1 for med in fixed_medications_list if len(med.get('all_products', [])) > 0)
+    high_confidence = sum(1 for med in fixed_medications_list if med.get('selection_confidence', 0) > 80)
+    medium_confidence = sum(1 for med in fixed_medications_list if 50 <= med.get('selection_confidence', 0) <= 80)
+    fallback_urls = sum(1 for med in fixed_medications_list if 'fallback' in med.get('reason', '').lower() or 'error' in med.get('reason', '').lower())
+    
+    print(f"Results Summary:")
+    print(f"- Successful matches: {successful_matches}/{len(fixed_medications_list)}")
+    print(f"- High confidence (>80%): {high_confidence}")
+    print(f"- Medium confidence (50-80%): {medium_confidence}")
+    print(f"- Low/No confidence: {len(fixed_medications_list) - high_confidence - medium_confidence}")
+    print(f"- Fallback URLs (errors): {fallback_urls}")
+    
+    # Detailed per-medication summary
     for med in fixed_medications_list:
         product_count = len(med.get('all_products', []))
         confidence = med.get('selection_confidence', 0)
-        status = "✓" if product_count > 0 else "✗"
-        confidence_indicator = f" ({confidence}%)" if confidence > 0 else ""
-        print(f"- {status} {med.get('name')} → {med.get('pharmeasy_name', 'No match')}{confidence_indicator}")
+        is_fallback = 'fallback' in med.get('reason', '').lower() or 'error' in med.get('reason', '').lower()
+        
+        if is_fallback:
+            status = "⚠"
+            confidence_indicator = " (fallback)"
+        else:
+            status = "✓" if product_count > 0 else "✗"
+            confidence_indicator = f" ({confidence}%)" if confidence > 0 else ""
+        
+        pharmeasy_name = med.get('pharmeasy_name', 'No match')
+        print(f"- {status} {med.get('name')} → {pharmeasy_name}{confidence_indicator}")
+    
     print("====================================")
     
     state["fixed_medications"] = fixed_medications_json

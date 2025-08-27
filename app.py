@@ -164,6 +164,19 @@ st.markdown("""
         margin: 0.75rem 0;
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.1);
     }
+    .file-count-button {
+        background: none !important;
+        border: none !important;
+        color: #0066cc !important;
+        text-decoration: underline !important;
+        cursor: pointer !important;
+        font-size: 0.9rem !important;
+        padding: 0 !important;
+    }
+    .file-count-button:hover {
+        color: #004499 !important;
+        text-decoration: none !important;
+    }
 </style>""", unsafe_allow_html=True)
 
 def main():
@@ -237,128 +250,81 @@ def main():
     col1, col2 = st.columns([2, 1])
     
     with col1:
-        # Compact file upload section
-        st.markdown('<div class="step-header"><h3>📤 Step 1: Upload Discharge Summary Images</h3></div>', unsafe_allow_html=True)
-        
+        # File selection section
         # Initialize session state for file management
         if 'selected_files' not in st.session_state:
             st.session_state.selected_files = []
-        if 'show_file_manager' not in st.session_state:
-            st.session_state.show_file_manager = False
+        if 'show_file_list' not in st.session_state:
+            st.session_state.show_file_list = False
         
         # Ensure selected_files is always a list
         if not isinstance(st.session_state.selected_files, list):
             st.session_state.selected_files = []
         
-        # Compact one-line interface
-        col_upload, col_manage = st.columns([3, 1])
+        # Compact one-line interface with Select Files button and file count
+        col_select, col_count, col_spacer = st.columns([2, 2, 6])
         
-        with col_upload:
-            # Initial file selection or file count display
-            if not st.session_state.selected_files:
-                # Show file uploader for initial selection
-                initial_files = st.file_uploader(
-                    "",
+        with col_select:
+            # Show file selection button
+            if st.button("📤 Select Files", key="select_files_btn", help="Choose discharge summary images"):
+                # Open file uploader in session state
+                st.session_state.show_file_uploader = True
+                st.rerun()
+        
+        with col_count:
+            if st.session_state.selected_files:
+                # Show clickable file count
+                total_size = sum(f.size for f in st.session_state.selected_files) / (1024 * 1024)
+                if st.button(f"{len(st.session_state.selected_files)} files ({total_size:.1f} MB)", 
+                           key="file_count_btn", 
+                           help="Click to view selected files"):
+                    st.session_state.show_file_list = not st.session_state.show_file_list
+                    st.rerun()
+        
+        # File uploader modal (shown when Select Files is clicked)
+        if 'show_file_uploader' in st.session_state and st.session_state.show_file_uploader:
+            st.markdown("---")
+            with st.container():
+                st.markdown("### 📤 Select Discharge Summary Images")
+                
+                # File uploader - when files are selected, they replace all existing files
+                new_files = st.file_uploader(
+                    "Choose files (will replace any previously selected files)",
                     type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'],
                     accept_multiple_files=True,
-                    key="initial_file_uploader",
-                    label_visibility="collapsed",
+                    key="new_file_uploader",
                     help="Select discharge summary images (PNG, JPG, JPEG, GIF, BMP, TIFF)"
                 )
                 
-                if initial_files:
-                    st.session_state.selected_files = list(initial_files)
-                    st.rerun()
-            else:
-                # Show compact file count
-                total_size = sum(f.size for f in st.session_state.selected_files) / (1024 * 1024)
-                st.markdown(f'<div class="success-box">✅ {len(st.session_state.selected_files)} files selected ({total_size:.1f} MB)</div>', unsafe_allow_html=True)
-        
-        with col_manage:
-            if st.session_state.selected_files:
-                if st.button("📁 Manage Files", key="manage_files_btn"):
-                    st.session_state.show_file_manager = True
-                    st.rerun()
-            
-            # Safety: Close file manager if no files are selected
-            if not st.session_state.selected_files and st.session_state.show_file_manager:
-                st.session_state.show_file_manager = False
-        
-        # File Manager Modal
-        if st.session_state.show_file_manager:
-            st.markdown("---")
-            with st.container():
-                st.markdown("### 📁 File Manager")
-                
-                # File management interface
-                col_files, col_actions = st.columns([2, 1])
-                
-                with col_files:
-                    st.markdown("**Current Files:**")
-                    files_to_remove = []
-                    
-                    if st.session_state.selected_files:
-                        for i, file in enumerate(st.session_state.selected_files):
-                            file_size = file.size / (1024 * 1024)
-                            col_info, col_remove = st.columns([4, 1])
-                            with col_info:
-                                st.write(f"{i+1}. **{file.name}** ({file_size:.2f} MB)")
-                            with col_remove:
-                                if st.button("🗑️", key=f"remove_file_{i}", help="Remove this file"):
-                                    files_to_remove.append(i)
-                    else:
-                        st.info("No files selected")
-                    
-                    # Remove selected files
-                    if files_to_remove:
-                        for idx in reversed(files_to_remove):  # Remove from end to avoid index issues
-                            st.session_state.selected_files.pop(idx)
-                        st.rerun()
-                
-                with col_actions:
-                    st.markdown("**Actions:**")
-                    
-                    # Add more files
-                    additional_files = st.file_uploader(
-                        "Add more files",
-                        type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'],
-                        accept_multiple_files=True,
-                        key="additional_file_uploader",
-                        help="Add more discharge summary images"
-                    )
-                    
-                    if additional_files:
-                        # Add new files to existing selection (avoid duplicates by name)
-                        existing_names = [f.name for f in st.session_state.selected_files]
-                        new_files = [f for f in additional_files if f.name not in existing_names]
-                        
-                        # Only update and rerun if there are actually new files
-                        if new_files:
-                            st.session_state.selected_files.extend(new_files)
-                            st.success(f"Added {len(new_files)} new files")
-                            # Only rerun if we actually added files
-                            st.rerun()
-                        
-                        # Show warning about duplicates without rerunning
-                        if len(new_files) != len(additional_files):
-                            st.warning(f"Skipped {len(additional_files) - len(new_files)} duplicate files")
-                    
-                    # Clear all files
-                    if st.button("🗑️ Clear All", key="clear_all_files"):
-                        st.session_state.selected_files = []
-                        st.rerun()
-                
-                # Modal controls
+                # Control buttons
                 col_done, col_cancel = st.columns(2)
                 with col_done:
-                    if st.button("✅ Done", key="file_manager_done"):
-                        st.session_state.show_file_manager = False
+                    if st.button("✅ Done", key="file_uploader_done"):
+                        if new_files:
+                            # Replace all existing files with new selection
+                            st.session_state.selected_files = list(new_files)
+                        st.session_state.show_file_uploader = False
                         st.rerun()
                 with col_cancel:
-                    if st.button("❌ Cancel", key="file_manager_cancel"):
-                        st.session_state.show_file_manager = False
+                    if st.button("❌ Cancel", key="file_uploader_cancel"):
+                        st.session_state.show_file_uploader = False
                         st.rerun()
-            
+            st.markdown("---")
+        
+        # File list display modal (read-only view of selected files)
+        if st.session_state.show_file_list and st.session_state.selected_files:
+            st.markdown("---")
+            with st.container():
+                st.markdown("### 📁 Selected Files")
+                
+                for i, file in enumerate(st.session_state.selected_files):
+                    file_size = file.size / (1024 * 1024)
+                    st.write(f"{i+1}. **{file.name}** ({file_size:.2f} MB)")
+                
+                # Close button
+                if st.button("❌ Close", key="close_file_list"):
+                    st.session_state.show_file_list = False
+                    st.rerun()
             st.markdown("---")
         
         # File validation for selected files
@@ -393,10 +359,10 @@ def main():
             with st.container():
                 st.markdown('<div class="instructions-modal">', unsafe_allow_html=True)
                 st.markdown("### 📖 Instructions")
-                st.markdown("1. **Upload Images**: Select multiple images of your discharge summary")
-                st.markdown("2. **Configure**: Choose AI models and processing options")
-                st.markdown("3. **Process**: Click the button to start processing")
-                st.markdown("4. **Review**: Check the extracted information")
+                st.markdown("1. **Select Files**: Click 'Select Files' to choose discharge summary images")
+                st.markdown("2. **Configure**: Choose AI models and processing options in the sidebar")
+                st.markdown("3. **Process**: Click 'Start Processing' to begin analysis")
+                st.markdown("4. **Review**: Check the extracted information in the Results section")
                 st.markdown("5. **Download**: Get your interactive HTML report")
                 st.markdown("")
                 st.markdown("**Supported formats**: PNG, JPG, JPEG, GIF, BMP, TIFF")
@@ -406,11 +372,13 @@ def main():
                 st.markdown("- 📑 Upload pages in the correct order")
                 st.markdown("- 🔧 Use gpt-4o for better accuracy")
                 st.markdown("- 💾 Enable file auto-opening for quick review")
+                st.markdown("- 📊 Click the file count to view selected files")
+                st.markdown("- 🔄 Selecting files again will replace previous selection")
                 st.markdown('</div>', unsafe_allow_html=True)
     
     # Processing section
     if uploaded_files:
-        st.markdown('<div class="step-header"><h3>🔄 Step 2: Process Documents</h3></div>', unsafe_allow_html=True)
+        st.markdown('<div class="step-header"><h3>🔄 Process Documents</h3></div>', unsafe_allow_html=True)
         
         # Initialize processing state variables
         if 'processing_completed' not in st.session_state:
@@ -757,7 +725,7 @@ def display_results():
     if not any(results.values()):
         return
     
-    st.markdown('<div class="step-header"><h3>📊 Step 3: Results</h3></div>', unsafe_allow_html=True)
+    st.markdown('<div class="step-header"><h3>📊 Results</h3></div>', unsafe_allow_html=True)
     
     # Create tabs dynamically based on available results
     available_tabs = []
