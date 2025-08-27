@@ -15,7 +15,6 @@ from langgraph_app import app_graph
 import zipfile
 import io
 from datetime import datetime
-import time
 
 # Load environment variables
 load_dotenv()
@@ -377,50 +376,82 @@ def main():
                 st.markdown("- 🔄 Selecting files again will replace previous selection")
                 st.markdown('</div>', unsafe_allow_html=True)
     
-    # Processing section - show as soon as files are selected
+    # Processing section
     if uploaded_files:
+        st.markdown('<div class="step-header"><h3>🔄 Process Documents</h3></div>', unsafe_allow_html=True)
+        
         # Initialize processing state variables
         if 'processing_completed' not in st.session_state:
             st.session_state.processing_completed = False
         if 'processing_logs' not in st.session_state:
             st.session_state.processing_logs = []
-        if 'processing_started' not in st.session_state:
-            st.session_state.processing_started = False
-        if 'processing_in_progress' not in st.session_state:
-            st.session_state.processing_in_progress = False
-        if 'processing_results' not in st.session_state:
-            st.session_state.processing_results = {}
+        if 'show_processing_logs' not in st.session_state:
+            st.session_state.show_processing_logs = False
         
-        # Process Documents button (similar to Select Files)
-        col_process, col_status, col_spacer = st.columns([2, 2, 6])
+        # Create a placeholder container for processing output that can be cleared
+        processing_container = st.empty()
         
-        with col_process:
-            if st.button("� Process Documents", key="process_docs_btn", help="Start processing the selected documents"):
-                # Start processing directly - no modal
-                st.session_state.processing_started = True
-                st.session_state.processing_in_progress = True
-                st.session_state.active_tab = "Summary"
-                st.rerun()
+        # Show different buttons based on processing state
+        if not st.session_state.processing_completed:
+            with processing_container.container():
+                if st.button("🚀 Start Processing", type="primary", use_container_width=True):
+                    # Reset processing state for new run
+                    st.session_state.processing_logs = []
+                    st.session_state.processing_completed = False
+                    st.session_state.show_processing_logs = False
+                    
+                    # Create a nested container for all processing output
+                    with st.container():
+                        process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_model, 
+                                        save_files, open_files, show_debug, 
+                                        run_diagnoses, run_medications, run_pharmacy, run_summary,
+                                        processing_container)  # Pass the container to clear it later
+        else:
+            # Clear the processing container and show completion buttons
+            with processing_container.container():
+                # Show processing completed button
+                col_completed, col_reprocess = st.columns([3, 1])
+                with col_completed:
+                    if st.button("✅ Processing Completed (click to view)", type="secondary", use_container_width=True):
+                        st.session_state.show_processing_logs = not st.session_state.show_processing_logs
+                with col_reprocess:
+                    if st.button("🔄 Reprocess", type="primary", use_container_width=True):
+                        # Reset state and reprocess
+                        st.session_state.processing_completed = False
+                        st.session_state.processing_logs = []
+                        st.session_state.show_processing_logs = False
+                        st.rerun()
         
-        with col_status:
-            if st.session_state.processing_completed:
-                st.success("✅ Processing Complete")
-        
-        # Direct processing when button is clicked
-        if st.session_state.processing_started and st.session_state.processing_in_progress:
-            # Reset processing state for new run
-            st.session_state.processing_logs = []
-            st.session_state.processing_completed = False
-            st.session_state.processing_results = {}
-            st.session_state.processing_in_progress = False
-            st.session_state.processing_started = False
-            
-            # Process documents directly
-            process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_model, 
-                            save_files, open_files, show_debug, 
-                            run_diagnoses, run_medications, run_pharmacy, run_summary)
-    # Display results as soon as files are selected
-    if uploaded_files:
+        # Show processing logs modal when requested
+        if st.session_state.show_processing_logs and st.session_state.processing_logs:
+            with st.container():
+                st.markdown("---")
+                st.markdown("### 📋 Processing Logs")
+                
+                # Create a scrollable container for logs
+                log_container = st.container()
+                with log_container:
+                    for log_entry in st.session_state.processing_logs:
+                        if log_entry['type'] == 'info':
+                            st.info(log_entry['message'])
+                        elif log_entry['type'] == 'success':
+                            st.success(log_entry['message'])
+                        elif log_entry['type'] == 'warning':
+                            st.warning(log_entry['message'])
+                        elif log_entry['type'] == 'error':
+                            st.error(log_entry['message'])
+                        else:
+                            st.write(log_entry['message'])
+                
+                # Close button
+                if st.button("❌ Close Logs", key="close_processing_logs"):
+                    st.session_state.show_processing_logs = False
+                    st.rerun()
+                
+                st.markdown("---")
+
+    # Display results progressively as processing steps complete
+    if 'processing_results' in st.session_state and st.session_state.processing_results:
         display_results()
 
 def add_processing_log(message, log_type="info"):
@@ -435,7 +466,7 @@ def add_processing_log(message, log_type="info"):
     })
 
 def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_model, save_files, open_files, show_debug, 
-                     run_diagnoses, run_medications, run_pharmacy, run_summary):
+                     run_diagnoses, run_medications, run_pharmacy, run_summary, processing_container=None):
     """Process the uploaded documents through the entire pipeline"""
     
     # Initialize session state for results
@@ -614,8 +645,11 @@ def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_mode
             
             # Set completion state 
             st.session_state.processing_completed = True
-            st.session_state.processing_in_progress = False
             add_processing_log("🎉 All processing steps completed successfully!", "success")
+            
+            # Clear the processing container to hide all the processing output
+            if processing_container:
+                processing_container.empty()
             
             # Trigger rerun to show the completed state
             st.rerun()
@@ -625,12 +659,20 @@ def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_mode
         add_processing_log(error_msg, "error")
         st.error(error_msg)
         st.session_state.processing_completed = True  # Mark as completed even if failed so user can view logs
-        st.session_state.processing_in_progress = False
+        
+        # Clear the processing container
+        if processing_container:
+            processing_container.empty()
         
         if show_debug:
             st.exception(e)
         
         # Trigger rerun to show the completed state
+        st.rerun()
+        
+        # Clear the processing container and trigger rerun
+        if processing_container:
+            processing_container.empty()
         st.rerun()
 
 def clean_markdown(markdown):
@@ -674,43 +716,44 @@ def open_file_in_system(filename):
 
 def display_results():
     """Display the processing results progressively as steps complete"""
-    st.markdown('<div class="step-header"><h3>📊 Results</h3></div>', unsafe_allow_html=True)
-    
-    # Initialize results if not present
     if 'processing_results' not in st.session_state:
-        st.session_state.processing_results = {}
+        return
     
     results = st.session_state.processing_results
+    
+    # Only show results header if we have any results
+    if not any(results.values()):
+        return
+    
+    st.markdown('<div class="step-header"><h3>📊 Results</h3></div>', unsafe_allow_html=True)
     
     # Create tabs dynamically based on available results
     available_tabs = []
     tab_labels = []
     
-    # Always show Summary tab
+    # Always show Summary tab if we have any results
     available_tabs.append("summary")
     tab_labels.append("📋 Summary")
     
-    # Show other tabs only if we have results
-    if results:
-        # Show Markdown tab if OCR is complete
-        if 'markdown' in results and results['markdown']:
-            available_tabs.append("markdown")
-            tab_labels.append("📄 Markdown")
-        
-        # Show Diagnoses tab if diagnoses extraction is complete
-        if 'diagnoses' in results and results['diagnoses'] is not None:
-            available_tabs.append("diagnoses")
-            tab_labels.append("🩺 Diagnoses")
-        
-        # Show Medications tab if medications extraction is complete
-        if 'medications' in results and results['medications'] is not None:
-            available_tabs.append("medications")
-            tab_labels.append("💊 Medications")
-        
-        # Show Medication Links tab if PharmeEasy integration is complete
-        if 'fixed_medications' in results and results['fixed_medications'] is not None:
-            available_tabs.append("medication_links")
-            tab_labels.append("🔗 Medication Links")
+    # Show Markdown tab if OCR is complete
+    if 'markdown' in results and results['markdown']:
+        available_tabs.append("markdown")
+        tab_labels.append("📄 Markdown")
+    
+    # Show Diagnoses tab if diagnoses extraction is complete
+    if 'diagnoses' in results and results['diagnoses'] is not None:
+        available_tabs.append("diagnoses")
+        tab_labels.append("🩺 Diagnoses")
+    
+    # Show Medications tab if medications extraction is complete
+    if 'medications' in results and results['medications'] is not None:
+        available_tabs.append("medications")
+        tab_labels.append("💊 Medications")
+    
+    # Show Medication Links tab if PharmeEasy integration is complete
+    if 'fixed_medications' in results and results['fixed_medications'] is not None:
+        available_tabs.append("medication_links")
+        tab_labels.append("🔗 Medication Links")
     
     # Create the tabs
     if len(available_tabs) == 1:
@@ -723,90 +766,9 @@ def display_results():
     for i, (tab_type, container) in enumerate(zip(available_tabs, tab_containers)):
         with container:
             if tab_type == "summary":
-                st.subheader("📋 Processing Summary")
-                
-                # Show processing status
-                if st.session_state.get('processing_in_progress', False):
-                    st.info("⏳ Processing in progress... Follow the logs below")
-                    
-                    # Show real-time processing logs as they happen
-                    if st.session_state.get('processing_logs', []):
-                        st.subheader("📋 Live Processing Logs")
-                        log_container = st.container()
-                        with log_container:
-                            for log_entry in st.session_state.processing_logs:
-                                if log_entry['type'] == 'info':
-                                    st.info(f"[{log_entry.get('timestamp', '')}] {log_entry['message']}")
-                                elif log_entry['type'] == 'success':
-                                    st.success(f"[{log_entry.get('timestamp', '')}] {log_entry['message']}")
-                                elif log_entry['type'] == 'warning':
-                                    st.warning(f"[{log_entry.get('timestamp', '')}] {log_entry['message']}")
-                                elif log_entry['type'] == 'error':
-                                    st.error(f"[{log_entry.get('timestamp', '')}] {log_entry['message']}")
-                                else:
-                                    st.write(f"[{log_entry.get('timestamp', '')}] {log_entry['message']}")
-                        
-                        # Auto-scroll by re-running every few seconds during processing
-                        if st.session_state.get('processing_in_progress', False):
-                            time.sleep(2)
-                            st.rerun()
-                    
-                elif st.session_state.get('processing_completed', False):
-                    st.success("✅ Processing completed successfully!")
-                    
-                    # Show completed processing logs in an expandable section
-                    if st.session_state.get('processing_logs', []):
-                        with st.expander("📋 View Complete Processing Logs", expanded=False):
-                            for log_entry in st.session_state.processing_logs:
-                                if log_entry['type'] == 'info':
-                                    st.info(f"[{log_entry.get('timestamp', '')}] {log_entry['message']}")
-                                elif log_entry['type'] == 'success':
-                                    st.success(f"[{log_entry.get('timestamp', '')}] {log_entry['message']}")
-                                elif log_entry['type'] == 'warning':
-                                    st.warning(f"[{log_entry.get('timestamp', '')}] {log_entry['message']}")
-                                elif log_entry['type'] == 'error':
-                                    st.error(f"[{log_entry.get('timestamp', '')}] {log_entry['message']}")
-                                else:
-                                    st.write(f"[{log_entry.get('timestamp', '')}] {log_entry['message']}")
-                else:
-                    st.info("⏳ Click 'Process Documents' to start processing")
-                
-                # Show available results summary only if processing has started
-                if st.session_state.get('processing_logs', []) or results:
-                    st.subheader("📊 Available Results")
-                    
-                    # Results overview
-                    if 'markdown' in results and results['markdown']:
-                        st.markdown("- ✅ **OCR Text** - Extracted text from images (available in Markdown tab)")
-                    else:
-                        st.markdown("- ⏳ **OCR Text** - Not yet processed")
-                        
-                    if 'diagnoses' in results and results['diagnoses']:
-                        diagnoses_data = results['diagnoses']
-                        diagnoses_count = len(diagnoses_data.get('diagnoses', []))
-                        lab_tests_count = len(diagnoses_data.get('lab_tests', []))
-                        st.markdown(f"- ✅ **Medical Diagnoses** - {diagnoses_count} diagnoses, {lab_tests_count} lab tests (available in Diagnoses tab)")
-                    else:
-                        st.markdown("- ⏳ **Medical Diagnoses** - Not yet processed")
-                        
-                    if 'medications' in results and results['medications']:
-                        medications_data = results['medications']
-                        medications_count = len(medications_data.get('medications', []))
-                        st.markdown(f"- ✅ **Medications** - {medications_count} medications extracted (available in Medications tab)")
-                    else:
-                        st.markdown("- ⏳ **Medications** - Not yet processed")
-                        
-                    if 'fixed_medications' in results and results['fixed_medications']:
-                        fixed_meds_data = results['fixed_medications']
-                        fixed_count = len(fixed_meds_data.get('medications', []))
-                        successful_matches = sum(1 for med in fixed_meds_data.get('medications', []) if len(med.get('all_products', [])) > 0)
-                        st.markdown(f"- ✅ **Pharmacy Links** - {successful_matches}/{fixed_count} medications matched with pharmacy products")
-                    else:
-                        st.markdown("- ⏳ **Pharmacy Links** - Not yet processed")
-                
-                # Show HTML summary if available
+                st.subheader("Interactive HTML Summary")
                 if 'html_summary' in results and results['html_summary'] is not None:
-                    st.subheader("📄 Interactive HTML Report")
+                    # Display HTML summary
                     st.components.v1.html(results['html_summary'], height=600, scrolling=True)
                     
                     # Download button
@@ -817,9 +779,19 @@ def display_results():
                         mime="text/html",
                         use_container_width=True
                     )
-                elif st.session_state.get('processing_completed', False):
-                    st.subheader("📄 Interactive HTML Report")
-                    st.info("⏳ HTML report will be generated after processing is complete")
+                else:
+                    st.info("⏭️ HTML summary generation was skipped or in progress")
+                    st.markdown("**Available data:**")
+                    
+                    # Show what's available
+                    if 'markdown' in results and results['markdown']:
+                        st.markdown("- ✅ OCR Text (available in Markdown tab)")
+                    if 'diagnoses' in results and results['diagnoses']:
+                        st.markdown("- ✅ Medical Diagnoses")
+                    if 'medications' in results and results['medications']:
+                        st.markdown("- ✅ Extracted Medications")
+                    if 'fixed_medications' in results and results['fixed_medications']:
+                        st.markdown("- ✅ Pharmacy Links")
                         
             elif tab_type == "markdown":
                 st.subheader("Extracted Text (Markdown)")
