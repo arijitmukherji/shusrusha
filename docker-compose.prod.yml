@@ -1,0 +1,84 @@
+# Production Docker Compose for Shusrusha
+# Optimized for performance, security, and reliability
+version: '3.8'
+
+services:
+  shusrusha:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: shusrusha-prod
+    ports:
+      - "80:8501"  # Production typically runs on port 80
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - STREAMLIT_SERVER_HEADLESS=true
+      - STREAMLIT_SERVER_ENABLE_CORS=false
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+      - STREAMLIT_SERVER_ENABLE_STATIC_SERVING=true
+    volumes:
+      - ./uploads:/app/uploads:ro  # Read-only uploads
+      - ./output:/app/output
+      - ./logs:/app/logs
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.5'
+        reservations:
+          memory: 512M
+          cpus: '0.5'
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Nginx reverse proxy for production
+  nginx:
+    image: nginx:alpine
+    container_name: shusrusha-nginx
+    ports:
+      - "443:443"  # HTTPS
+      - "80:80"     # HTTP (redirects to HTTPS)
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./ssl:/etc/nginx/ssl:ro  # SSL certificates
+    depends_on:
+      - shusrusha
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  # Optional: Redis for caching
+  redis:
+    image: redis:alpine
+    container_name: shusrusha-redis
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    command: redis-server --appendonly yes
+    deploy:
+      resources:
+        limits:
+          memory: 256M
+          cpus: '0.5'
+
+networks:
+  default:
+    name: shusrusha-prod-network
+    driver: bridge
+
+volumes:
+  redis_data:
+    driver: local

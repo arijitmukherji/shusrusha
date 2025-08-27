@@ -1,0 +1,12 @@
+# Requirements for Local API Server
+# Install with: pip install -r requirements-local-api.txt
+
+flask>=2.3.0
+flask-cors>=4.0.0
+flask-limiter>=3.5.0
+python-dotenv>=1.0.0
+requests>=2.31.0
+
+# Optional: For enhanced logging and monitoring
+gunicorn>=21.2.0  # Production WSGI server
+redis>=4.6.0      # For distributed rate limiting (optional)

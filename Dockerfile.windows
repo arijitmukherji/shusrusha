@@ -1,0 +1,32 @@
+# Use Windows-based Python image for cross-compilation
+FROM python:3.11-windowsservercore
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements and install dependencies
+COPY requirements-app.txt .
+RUN pip install --no-cache-dir -r requirements-app.txt
+RUN pip install pyinstaller
+
+# Copy application files
+COPY app.py .
+COPY lib/ ./lib/
+COPY .env .
+
+# Build Windows executable
+RUN pyinstaller --onefile --windowed --name=Shusrusha \
+    --add-data="lib;lib" \
+    --hidden-import=tkinter \
+    --hidden-import=tkinter.filedialog \
+    --hidden-import=tkinter.messagebox \
+    --hidden-import=streamlit \
+    --hidden-import=langgraph \
+    --hidden-import=openai \
+    app.py
+
+# Create output directory and copy executable
+RUN mkdir C:\\output && copy dist\\Shusrusha.exe C:\\output\\
+
+# Set default command
+CMD ["cmd", "/c", "copy dist\\Shusrusha.exe C:\\output\\"]

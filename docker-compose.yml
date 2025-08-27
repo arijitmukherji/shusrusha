@@ -1,0 +1,55 @@
+# Docker Compose configuration for Shusrusha
+# Cross-platform compatible (Windows, macOS, Linux)
+
+services:
+  shusrusha:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: shusrusha-app
+    ports:
+      - "8501:8501"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - PYTHONUNBUFFERED=1
+      - STREAMLIT_SERVER_HEADLESS=true
+    volumes:
+      # Use named volumes for better cross-platform compatibility
+      - app_uploads:/app/uploads
+      - app_output:/app/output
+      - app_logs:/app/logs
+      - app_temp:/app/temp
+      # Mount sample images as read-only
+      - ./images:/app/images:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    # Resource limits (adjust based on your system)
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+          cpus: '1.5'
+        reservations:
+          memory: 512M
+          cpus: '0.25'
+
+# Named volumes for cross-platform persistence
+volumes:
+  app_uploads:
+    driver: local
+  app_output:
+    driver: local
+  app_logs:
+    driver: local
+  app_temp:
+    driver: local
+
+networks:
+  default:
+    name: shusrusha-network
+    driver: bridge

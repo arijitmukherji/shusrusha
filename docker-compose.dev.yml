@@ -1,0 +1,54 @@
+# Development Docker Compose for Shusrusha
+# Enables live reload and development features
+version: '3.8'
+
+services:
+  shusrusha-dev:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: shusrusha-dev
+    ports:
+      - "8501:8501"
+    environment:
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      - STREAMLIT_SERVER_FILE_WATCHER_TYPE=poll
+      - STREAMLIT_SERVER_RUN_ON_SAVE=true
+    volumes:
+      # Mount source code for live editing
+      - ./app.py:/app/app.py
+      - ./langgraph_app.py:/app/langgraph_app.py
+      - ./lib:/app/lib
+      - ./uploads:/app/uploads
+      - ./output:/app/output
+      # Exclude cache directories
+      - /app/__pycache__
+      - /app/lib/__pycache__
+    restart: unless-stopped
+    command: streamlit run app.py --server.address 0.0.0.0 --server.port 8501 --server.fileWatcherType poll --server.runOnSave true
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+  # Optional: Add a database for persistent storage
+  # postgres:
+  #   image: postgres:15-alpine
+  #   container_name: shusrusha-db
+  #   environment:
+  #     POSTGRES_DB: shusrusha
+  #     POSTGRES_USER: shusrusha
+  #     POSTGRES_PASSWORD: password
+  #   volumes:
+  #     - postgres_data:/var/lib/postgresql/data
+  #   ports:
+  #     - "5432:5432"
+
+networks:
+  default:
+    name: shusrusha-dev-network
+
+# volumes:
+#   postgres_data:
