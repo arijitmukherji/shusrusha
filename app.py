@@ -254,78 +254,91 @@ def main():
         # Initialize session state for file management
         if 'selected_files' not in st.session_state:
             st.session_state.selected_files = []
-        if 'show_file_list' not in st.session_state:
-            st.session_state.show_file_list = False
         
         # Ensure selected_files is always a list
         if not isinstance(st.session_state.selected_files, list):
             st.session_state.selected_files = []
         
-        # Compact one-line interface with Select Files button and file count
-        col_select, col_count, col_spacer = st.columns([2, 2, 6])
+        # Use Streamlit uploader but hide file displays with aggressive CSS
+        st.markdown("""
+        <style>
+        /* Hide all file display elements but keep upload functionality */
+        .stFileUploader section[data-testid="stFileUploaderDropzone"] ~ div,
+        .stFileUploader section[data-testid="stFileUploaderDropzone"] + div,
+        .stFileUploader > div > div > section + div,
+        .stFileUploader ul,
+        .stFileUploader li,
+        .stFileUploader > div > div:last-child,
+        .stFileUploader [data-testid*="fileUploadDropzone"] ~ *,
+        .stFileUploader [data-testid*="fileUploadDropzone"] + *,
+        div[data-testid="stFileUploader"] > div > div:nth-child(2),
+        div[data-testid="stFileUploader"] > div > div:nth-child(3),
+        div[data-testid="stFileUploader"] > div > div:nth-child(4),
+        div[data-testid="stFileUploader"] > div > div:nth-child(5),
+        div[data-testid="stFileUploader"] ul,
+        div[data-testid="stFileUploader"] li {
+            display: none !important;
+            visibility: hidden !important;
+            height: 0px !important;
+            max-height: 0px !important;
+            overflow: hidden !important;
+        }
         
-        with col_select:
-            # Show file selection button
-            if st.button("📤 Select Files", key="select_files_btn", help="Choose discharge summary images"):
-                # Open file uploader in session state
-                st.session_state.show_file_uploader = True
-                st.rerun()
+        /* Keep only the dropzone visible and functional */
+        .stFileUploader {
+            min-height: auto !important;
+        }
         
-        with col_count:
-            if st.session_state.selected_files:
-                # Show clickable file count
-                total_size = sum(f.size for f in st.session_state.selected_files) / (1024 * 1024)
-                if st.button(f"{len(st.session_state.selected_files)} files ({total_size:.1f} MB)", 
-                           key="file_count_btn", 
-                           help="Click to view selected files"):
-                    st.session_state.show_file_list = not st.session_state.show_file_list
-                    st.rerun()
+        .stFileUploader section[data-testid="stFileUploaderDropzone"] {
+            border: 2px dashed #ccc !important;
+            border-radius: 6px !important;
+            padding: 20px !important;
+            text-align: center !important;
+            background-color: #fafafa !important;
+        }
         
-        # File uploader modal (shown when Select Files is clicked)
-        if 'show_file_uploader' in st.session_state and st.session_state.show_file_uploader:
-            st.markdown("---")
-            with st.container():
-                st.markdown("### 📤 Select Discharge Summary Images")
-                
-                # File uploader - when files are selected, they replace all existing files
-                new_files = st.file_uploader(
-                    "Choose files (will replace any previously selected files)",
-                    type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'],
-                    accept_multiple_files=True,
-                    key="new_file_uploader",
-                    help="Select discharge summary images (PNG, JPG, JPEG, GIF, BMP, TIFF)"
-                )
-                
-                # Control buttons
-                col_done, col_cancel = st.columns(2)
-                with col_done:
-                    if st.button("✅ Done", key="file_uploader_done"):
-                        if new_files:
-                            # Replace all existing files with new selection
-                            st.session_state.selected_files = list(new_files)
-                        st.session_state.show_file_uploader = False
-                        st.rerun()
-                with col_cancel:
-                    if st.button("❌ Cancel", key="file_uploader_cancel"):
-                        st.session_state.show_file_uploader = False
-                        st.rerun()
-            st.markdown("---")
+        .stFileUploader section[data-testid="stFileUploaderDropzone"]:hover {
+            border-color: #999 !important;
+            background-color: #f0f0f0 !important;
+        }
+        </style>
+        """, unsafe_allow_html=True)
         
-        # File list display modal (read-only view of selected files)
-        if st.session_state.show_file_list and st.session_state.selected_files:
-            st.markdown("---")
-            with st.container():
-                st.markdown("### 📁 Selected Files")
-                
-                for i, file in enumerate(st.session_state.selected_files):
-                    file_size = file.size / (1024 * 1024)
-                    st.write(f"{i+1}. **{file.name}** ({file_size:.2f} MB)")
-                
-                # Close button
-                if st.button("❌ Close", key="close_file_list"):
-                    st.session_state.show_file_list = False
-                    st.rerun()
-            st.markdown("---")
+        # Initialize session state for file tracking
+        if 'selected_files' not in st.session_state:
+            st.session_state.selected_files = []
+        if 'last_uploader_state' not in st.session_state:
+            st.session_state.last_uploader_state = []
+        
+        uploaded_files = st.file_uploader(
+            "📤 Click to select discharge summary images or drag and drop files here",
+            type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'],
+            accept_multiple_files=True,
+            key="functional_file_uploader",
+            help="Supported formats: PNG, JPG, JPEG, GIF, BMP, TIFF"
+        )
+        
+        # Track uploader state changes to detect new selections
+        current_uploader_files = uploaded_files if uploaded_files else []
+        current_file_names = [f.name for f in current_uploader_files]
+        last_file_names = st.session_state.last_uploader_state
+        
+        # If uploader content changed, it's a new selection - REPLACE completely
+        if current_file_names != last_file_names:
+            st.session_state.selected_files = list(current_uploader_files)
+            st.session_state.last_uploader_state = current_file_names
+        
+        # Show just the filenames as a simple string with count
+        if st.session_state.selected_files:
+            sorted_file_names = sorted([f.name for f in st.session_state.selected_files])
+            files_display = " ".join(sorted_file_names)
+            count = len(st.session_state.selected_files)
+            st.markdown(
+                f'<div style="white-space: nowrap; overflow-x: auto; font-family: monospace; font-size: 14px; color: #333; padding: 5px 0;">'
+                f'{count} files: {files_display}'
+                f'</div>',
+                unsafe_allow_html=True
+            )
         
         # File validation for selected files
         uploaded_files = st.session_state.selected_files
@@ -875,14 +888,15 @@ def display_results():
                         for i, med in enumerate(medications_list, 1):
                             with st.container():
                                 st.markdown(f"""
-                                <div class="medication-card">
-                                    <div style="display: flex; align-items: center; margin-bottom: 0.5rem;">
-                                        <h4 style="margin: 0; color: #2E8B57;">💊 {i}. {med.get('name', 'Unknown Medication')}</h4>
+                                <div class="medication-card" style="margin-bottom: 0.5rem; padding: 0.5rem; border-left: 3px solid #2E8B57; background-color: #f8f9fa;">
+                                    <div style="margin-bottom: 0.25rem;">
+                                        <strong style="color: #2E8B57; font-size: 1.1em;">💊 {i}. {med.get('name', 'Unknown Medication')}</strong>
                                     </div>
-                                    <div style="margin-left: 1rem;">
-                                        <p style="margin: 0.25rem 0;"><strong>⚖️ Strength:</strong> {med.get('strength', 'Not specified')}</p>
-                                        <p style="margin: 0.25rem 0;"><strong>📋 Instructions:</strong> {med.get('instructions', 'No instructions provided')}</p>
-                                        <p style="margin: 0.25rem 0;"><strong>⏱️ Duration:</strong> {med.get('duration', 'Not specified')}</p>
+                                    <div style="display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.9em;">
+                                        <span><strong>Form:</strong> {med.get('form', 'Not specified')}</span>
+                                        <span><strong>Strength:</strong> {med.get('strength', 'Not specified')}</span>
+                                        <span><strong>Instructions:</strong> {med.get('instructions', 'No instructions provided')}</span>
+                                        <span><strong>Duration:</strong> {med.get('duration', 'Not specified')}</span>
                                     </div>
                                 </div>
                                 """, unsafe_allow_html=True)

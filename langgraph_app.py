@@ -176,7 +176,8 @@ def extract_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> G
     markdown_text = state.get("markdown", "")
     
     system_prompt = """You are an expert medical doctor practising in Kolkata India. You have been given a hospital discharge report of a patient in simple mardown text format. Your job is to identify all the relevant medication names from the document along with instructions. In case of difficulty identifying a medication name, make sure the names match actual medications used in that part of the world. Return a JSON structure of the form
-{"medications": [{"name":"medicine_1", "strength":"5 mg", "instructions":"Twice daily", "duration":"continue"}, {"name":"medicine_2", "strength":"10 ml", "instructions":"as needed", "duration":"as needed"}, {"name":"medicine_3", "strength":"1 pouch", "instructions":"BID", "duration":"10 days"}]}"""
+{"medications": [{"name":"paracetamol xr", "form":"tablet", "strength":"5 mg", "instructions":"Twice daily", "duration":"continue"}, {"name":"atorvastatin", "form":"syrup", "strength":"10 ml", "instructions":"as needed", "duration":"as needed"}, {"name":"medicine_3", "form":"powder", "strength":"1 pouch", "instructions":"BID", "duration":"10 days"}]}. The "name" fields should only contain the medicine name e.g. "Rantac XR")
+and not contain other information like its strength or form (tab/table, cap/capsure, syr/syrup, pdr/powder etc.)"""
 
     client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
     
@@ -897,11 +898,10 @@ or does it contain the original name as a substring?
    - "high": Exact match or very close (>90% similar)
    - "medium": Recognizably similar (70-90% similar) 
    - "low": Different but similar(<70% similar)
-2. DRUG CATEGORY: Does the medication category match what would be expected for the diagnoses?
-3. STRENGTH/DOSAGE: Is the strength appropriate and commonly prescribed?
-4. FORMULATION: Is the formulation (tablet, syrup, injection, etc.) appropriate?
-5. BRAND VS GENERIC: Consider both brand and generic equivalents
-6. COMMON USAGE: Is this a commonly prescribed medication for the given diagnoses?
+2. STRENGTH/DOSAGE: Is the strength appropriate and commonly prescribed?
+3. FORMULATION: Is the formulation (tablet, syrup, injection, etc.) appropriate?
+4. BRAND VS GENERIC: Consider both brand and generic equivalents
+5. COMMON USAGE: Is this a commonly prescribed medication for the given diagnoses?
 
 IMPORTANT: When evaluating name similarity, consider:
 - Exact matches or minor variations (like "Paracetamol" vs "Paracetamol 500mg tablet") should be "high"
@@ -987,7 +987,7 @@ def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[s
     This function is designed to be run in parallel.
     """
     medicine_name = medication.get('name', 'Unknown')
-    print(f"\n--- Processing medication {medication_index + 1}: {medicine_name} ---")
+    print(f"\n🚀 STARTING: [{medication_index + 1}] {medicine_name}")
     
     try:
         # Fetch Pharmeasy page content
@@ -1129,7 +1129,9 @@ def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> Graph
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
         # Submit all medication processing tasks
         future_to_index = {}
+        future_to_medication = {}
         for i, medication in enumerate(medications_list):
+            medicine_name = medication.get('name', f'Unknown_{i}')
             future = executor.submit(
                 process_single_medication, 
                 medication, 
@@ -1138,6 +1140,14 @@ def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> Graph
                 i
             )
             future_to_index[future] = i
+            future_to_medication[future] = medicine_name
+        
+        # Print all medications that are now being processed in parallel
+        active_medications = list(future_to_medication.values())
+        print(f"\n🔄 PARALLEL PROCESSING STARTED - {len(active_medications)} medications:")
+        for i, med_name in enumerate(active_medications):
+            print(f"   [{i+1}] {med_name}")
+        print(f"   Using {max_workers} parallel workers\n")
         
         # Collect results as they complete
         results = [None] * len(medications_list)  # Pre-allocate list to maintain order
