@@ -81,7 +81,9 @@ def ocr_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
     in Kolkata, India. Transcribe this discharge summary issued to a patient exactly 
     (i.e. preserve all sections/headers/order/ and all written text). If in doubt about some unclear writing,
       try to match with terms that make sense in an India context, for medical field and 
-      relevant diagnoses, and check medications against India availability. Then output a 
+      relevant diagnoses, and check medications against India availability. Do not change
+      ocr-detected medicine name in non-trivial ways (e.g. do not change Pan => Rantac which
+      has many more and different characters). Then output a 
       simple markdown document with all the contents with the same content as the original. For 
       prescribed medications, "Tab" is often written to look like "76" """
     
@@ -175,9 +177,12 @@ def extract_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> G
     """
     markdown_text = state.get("markdown", "")
     
-    system_prompt = """You are an expert medical doctor practising in Kolkata India. You have been given a hospital discharge report of a patient in simple mardown text format. Your job is to identify all the relevant medication names from the document along with instructions. In case of difficulty identifying a medication name, make sure the names match actual medications used in that part of the world. Return a JSON structure of the form
-{"medications": [{"name":"paracetamol xr", "form":"tablet", "strength":"5 mg", "instructions":"Twice daily", "duration":"continue"}, {"name":"atorvastatin", "form":"syrup", "strength":"10 ml", "instructions":"as needed", "duration":"as needed"}, {"name":"medicine_3", "form":"powder", "strength":"1 pouch", "instructions":"BID", "duration":"10 days"}]}. The "name" fields should only contain the medicine name e.g. "Rantac XR")
-and not contain other information like its strength or form (tab/table, cap/capsure, syr/syrup, pdr/powder etc.)"""
+    system_prompt = """You are an expert medical doctor practising in Kolkata India. You have been given a hospital discharge report of a patient in simple mardown text format. Your job is to identify all the relevant medications from the document along with instructions. In case of difficulty identifying a medication, make sure the names match actual medications used in that part of the world. Return a JSON structure of the form
+{"medications": [{"name":"paracetamol xr", "form":"tablet", "strength":"5 mg", "instructions":"Twice daily", "duration":"continue"}, {"name":"atorvastatin", "form":"syrup", "strength":"10 ml", "instructions":"as needed", "duration":"as needed"}, {"name":"medicine_3", "form":"powder", "strength":"1 pouch", "instructions":"BID", "duration":"10 days"}]}.
+The "name" fields should only contain the medicine name e.g. "Rantac XR")
+and not contain other information like its strength or form factor (tab/table, cap/capsure, 
+syr/syrup, pdr/powder etc.). Finally append a small description to the instructions if they
+are not easily understandable by a layman"""
 
     client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
     
@@ -986,12 +991,38 @@ def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[s
     Process a single medication to find matching products on PharmeEasy.
     This function is designed to be run in parallel.
     """
-    medicine_name = medication.get('name', 'Unknown')
-    print(f"\n🚀 STARTING: [{medication_index + 1}] {medicine_name}")
+    base_medicine_name = medication.get('name', 'Unknown')
+    
+    # Build enhanced search term with strength and form
+    search_terms = [base_medicine_name.strip()]
+    
+    # Extract numerical strength (e.g., "40mg", "5ml", "100")
+    strength = medication.get('strength', '').strip()
+    if strength:
+        # Extract only the numerical part, exclude units (mg, ml, etc.)
+        import re
+        strength_match = re.search(r'(\d+\.?\d*)', strength.lower())
+        if strength_match:
+            numerical_strength = strength_match.group(1)
+            # Only add if it's not already in the medicine name and is meaningful
+            if numerical_strength and numerical_strength not in base_medicine_name.lower():
+                search_terms.append(numerical_strength)
+    
+    # Add form factor if available and not already in name
+    form = medication.get('form', '').strip()
+    if form and form.lower() not in base_medicine_name.lower():
+        search_terms.append(form.lower())
+    
+    # Construct final search term
+    enhanced_medicine_name = ' '.join(search_terms)
+    
+    print(f"\n🚀 STARTING: [{medication_index + 1}] {base_medicine_name}")
+    if enhanced_medicine_name != base_medicine_name:
+        print(f"   🔍 Enhanced search: '{enhanced_medicine_name}'")
     
     try:
-        # Fetch Pharmeasy page content
-        html_content = fetch_pharmeasy_content(medicine_name)
+        # Fetch Pharmeasy page content using enhanced search term
+        html_content = fetch_pharmeasy_content(enhanced_medicine_name)
         
         # Create enhanced medication object
         medication_copy = medication.copy()
@@ -1005,7 +1036,7 @@ def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[s
                 
                 # Use LLM to select the best matching product
                 selection_result = select_best_product_match(
-                    medicine_name, 
+                    base_medicine_name,  # Use original name for LLM analysis
                     products, 
                     diagnoses_list, 
                     model
@@ -1027,7 +1058,7 @@ def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[s
                     })
                     
                     # Check if name differs significantly
-                    original_lower = medicine_name.lower()
+                    original_lower = base_medicine_name.lower()
                     pharmeasy_lower = primary_product["name"].lower()
                     
                     if original_lower not in pharmeasy_lower and pharmeasy_lower not in original_lower:
@@ -1068,7 +1099,7 @@ def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[s
             
             else:
                 # No products found in parsed content
-                fallback_url = f"https://pharmeasy.in/search/all?name={medicine_name.replace(' ', '%20')}"
+                fallback_url = f"https://pharmeasy.in/search/all?name={base_medicine_name.replace(' ', '%20')}"  # Use original name for fallback
                 medication_copy.update({
                     "url": fallback_url,
                     "reason": "No products found in page content, using search URL",
@@ -1078,7 +1109,7 @@ def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[s
                 print(f"✗ No products extracted from page content")
         else:
             # Failed to fetch content
-            fallback_url = f"https://pharmeasy.in/search/all?name={medicine_name.replace(' ', '%20')}"
+            fallback_url = f"https://pharmeasy.in/search/all?name={base_medicine_name.replace(' ', '%20')}"  # Use original name for fallback
             medication_copy.update({
                 "url": fallback_url,
                 "reason": "Failed to fetch page content, using search URL",
@@ -1090,10 +1121,10 @@ def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[s
         return medication_copy
         
     except Exception as e:
-        print(f"✗ Error processing {medicine_name}: {e}")
+        print(f"✗ Error processing {base_medicine_name}: {e}")  # Use original name for error message
         # Fallback for this medication
         medication_copy = medication.copy()
-        fallback_url = f"https://pharmeasy.in/search/all?name={medicine_name.replace(' ', '%20')}"
+        fallback_url = f"https://pharmeasy.in/search/all?name={base_medicine_name.replace(' ', '%20')}"  # Use original name for fallback
         medication_copy.update({
             "url": fallback_url,
             "reason": f"Error during processing: {str(e)}",
@@ -1122,16 +1153,25 @@ def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> Graph
     print(f"Processing {len(medications_list)} medications in parallel...")
     
     # Use ThreadPoolExecutor for parallel processing
-    # Reduced concurrency to avoid rate limiting and race conditions
-    max_workers = min(2, len(medications_list))  # Max 2 concurrent requests to be more conservative
+    # Increased concurrency but with rate limiting to avoid overwhelming servers
+    max_workers = min(5, len(medications_list))  # Max 5 concurrent requests with rate limiting
     fixed_medications_list = []
     
     with ThreadPoolExecutor(max_workers=max_workers) as executor:
-        # Submit all medication processing tasks
+        # Submit all medication processing tasks with rate limiting
         future_to_index = {}
         future_to_medication = {}
+        
+        print(f"Submitting {len(medications_list)} medications with rate limiting (1 per second)...")
+        
         for i, medication in enumerate(medications_list):
             medicine_name = medication.get('name', f'Unknown_{i}')
+            
+            # Rate limiting: Start maximum 1 lookup per second
+            if i > 0:  # Don't delay the first submission
+                time.sleep(1.0)  # 1 second delay between submissions
+                print(f"⏱️ Rate limit delay: Starting medication {i+1} ({medicine_name})")
+            
             future = executor.submit(
                 process_single_medication, 
                 medication, 
@@ -1147,7 +1187,7 @@ def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> Graph
         print(f"\n🔄 PARALLEL PROCESSING STARTED - {len(active_medications)} medications:")
         for i, med_name in enumerate(active_medications):
             print(f"   [{i+1}] {med_name}")
-        print(f"   Using {max_workers} parallel workers\n")
+        print(f"   Using {max_workers} parallel workers with 1-second rate limiting\n")
         
         # Collect results as they complete
         results = [None] * len(medications_list)  # Pre-allocate list to maintain order
@@ -1196,7 +1236,7 @@ def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> Graph
     fixed_medications_json = {"medications": fixed_medications_list}
     
     print(f"\n=== Parallel Processing Complete (Model: {model}) ===")
-    print(f"Processed {len(fixed_medications_list)} medications using {max_workers} parallel workers")
+    print(f"Processed {len(fixed_medications_list)} medications using {max_workers} parallel workers with rate limiting")
     
     if failed_count > 0:
         print(f"⚠️ {failed_count} medications failed during processing and used fallback URLs")
