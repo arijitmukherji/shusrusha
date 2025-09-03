@@ -292,7 +292,16 @@ def fetch_pharmeasy_content(medicine_name: str, max_retries: int = 3) -> str:
 def parse_pharmeasy_products(html_content: str, model: str = "gpt-4o-mini", max_retries: int = 3, api_key: str = None) -> List[Dict[str, str]]:
     """
     Use LLM to parse Pharmeasy HTML and extract product listings with retry logic.
+    Also handles JSON data embedded in the page.
     """
+    
+    # First, try to extract products from JSON data embedded in the page
+    json_products = extract_json_products_from_html(html_content)
+    if json_products:
+        print(f"Extracted {len(json_products)} products from embedded JSON data")
+        return json_products
+    
+    # Fallback to LLM parsing for HTML elements
     for attempt in range(max_retries):
         try:
             # Rate limiting for OpenAI API
@@ -315,6 +324,7 @@ Look for patterns like:
 - Links to product pages (often containing "/online-medicine-order/" or "/medicines/")
 - Product names in headings, spans, or divs
 - Medicine names and dosages
+- JSON data containing product information
 
 Return JSON format:
 {"products": [{"name": "Product Name 1", "url": "https://pharmeasy.in/online-medicine-order/..."}, {"name": "Product Name 2", "url": "https://pharmeasy.in/..."}, ...]}
@@ -373,6 +383,126 @@ If no products found, return empty products array."""
     
     print(f"Failed to parse Pharmeasy HTML after {max_retries} attempts")
     return []
+
+def extract_json_products_from_html(html_content: str) -> List[Dict[str, str]]:
+    """
+    Extract product data from JSON embedded in PharmeEasy HTML.
+    """
+    import json
+    import re
+    
+    try:
+        # Look for JSON data in script tags or inline JSON
+        # PharmeEasy often embeds product data in __NEXT_DATA__ or similar structures
+        
+        # Pattern 1: Look for __NEXT_DATA__ JSON
+        next_data_pattern = r'__NEXT_DATA__["\']?\s*[=:]\s*({.*?})\s*(?:;|\n|</script>)'
+        matches = re.findall(next_data_pattern, html_content, re.DOTALL)
+        
+        for match in matches:
+            try:
+                data = json.loads(match)
+                products = extract_products_from_json(data)
+                if products:
+                    return products
+            except json.JSONDecodeError:
+                continue
+        
+        # Pattern 2: Look for product arrays directly in JSON
+        product_pattern = r'"products"\s*:\s*\[([^\]]*"name"[^\]]*)\]'
+        matches = re.findall(product_pattern, html_content, re.DOTALL)
+        
+        for match in matches:
+            try:
+                # Try to parse the products array
+                products_json = f'[{match}]'
+                products_data = json.loads(products_json)
+                
+                extracted_products = []
+                for product in products_data:
+                    if isinstance(product, dict) and 'name' in product:
+                        name = product.get('name', '')
+                        slug = product.get('slug', '')
+                        product_id = product.get('productId', '')
+                        
+                        # Construct URL
+                        if slug:
+                            url = f"https://pharmeasy.in/online-medicine-order/{slug}"
+                        elif product_id:
+                            url = f"https://pharmeasy.in/online-medicine-order?medicine_id={product_id}"
+                        else:
+                            continue
+                        
+                        if name and url:
+                            extracted_products.append({
+                                "name": name,
+                                "url": url
+                            })
+                
+                if extracted_products:
+                    return extracted_products[:10]  # Limit to 10 products
+                    
+            except json.JSONDecodeError:
+                continue
+        
+        # Pattern 3: Look for individual product objects with name and slug
+        individual_product_pattern = r'{[^}]*"name"\s*:\s*"([^"]*)"[^}]*"slug"\s*:\s*"([^"]*)"[^}]*}'
+        matches = re.findall(individual_product_pattern, html_content)
+        
+        if matches:
+            extracted_products = []
+            for name, slug in matches[:10]:  # Limit to 10
+                if name and slug:
+                    url = f"https://pharmeasy.in/online-medicine-order/{slug}"
+                    extracted_products.append({
+                        "name": name,
+                        "url": url
+                    })
+            
+            if extracted_products:
+                return extracted_products
+        
+        return []
+        
+    except Exception as e:
+        print(f"Error extracting JSON products: {e}")
+        return []
+
+def extract_products_from_json(data: dict) -> List[Dict[str, str]]:
+    """
+    Recursively extract product information from nested JSON data.
+    """
+    products = []
+    
+    def find_products(obj, path=""):
+        if isinstance(obj, dict):
+            # Check if this looks like a product object
+            if 'name' in obj and 'slug' in obj:
+                name = obj.get('name', '')
+                slug = obj.get('slug', '')
+                product_id = obj.get('productId', '')
+                
+                if name and (slug or product_id):
+                    if slug:
+                        url = f"https://pharmeasy.in/online-medicine-order/{slug}"
+                    else:
+                        url = f"https://pharmeasy.in/online-medicine-order?medicine_id={product_id}"
+                    
+                    products.append({
+                        "name": name,
+                        "url": url
+                    })
+            
+            # Continue searching in nested objects
+            for key, value in obj.items():
+                find_products(value, f"{path}.{key}" if path else key)
+                
+        elif isinstance(obj, list):
+            for i, item in enumerate(obj):
+                find_products(item, f"{path}[{i}]" if path else f"[{i}]")
+    
+    find_products(data)
+    return products[:10]  # Limit to 10 products
 
 def wrap_medication_items_in_lists(html_content: str) -> str:
     """
@@ -881,168 +1011,202 @@ def generate_medications_table(fixed_medications: Dict[str, Any]) -> str:
 
 def select_best_product_match(medicine_name: str, products: List[Dict[str, str]], diagnoses: List[str], model: str = "gpt-4o-mini", max_retries: int = 3, medication_details: Dict[str, Any] = None, api_key: str = None) -> Dict[str, Any]:
     """
-    Use LLM to select the best matching product based on medicine name similarity,
-    diagnoses relevance, drug category, strength, form, etc. with retry logic.
-    Includes enhanced exact name matching with case-insensitive and whitespace-tolerant comparison.
+    Use hierarchical scoring to select the best matching product based on:
+    1. Exact Name match (ignoring non-alphabetic characters)
+    2. Strength matching
+    3. Name similarity
+    4. Category similarity
     """
-    def normalize_text(text: str) -> str:
-        """Normalize text by removing non-alphanumeric characters and converting to lowercase."""
+    def normalize_name_for_exact_match(text: str) -> str:
+        """Normalize text by removing non-alphabetic characters and converting to lowercase."""
         import re
-        return re.sub(r'[^a-zA-Z0-9]', '', text).lower()
+        return re.sub(r'[^a-zA-Z]', '', text).lower()
 
-    def is_exact_name_match(medicine_name: str, product_name: str) -> bool:
-        """Check if medicine name is fully contained in product name (case-insensitive, whitespace-tolerant)."""
-        normalized_medicine = normalize_text(medicine_name)
-        normalized_product = normalize_text(product_name)
+    def extract_strength(text: str) -> str:
+        """Extract numerical strength from text (e.g., '150mg' -> '150')."""
+        import re
+        matches = re.findall(r'(\d+(?:\.\d+)?)\s*(?:mg|ml|g|mcg|units?|iu)', text.lower())
+        return matches[0] if matches else ""
 
-        # Check if medicine name is fully contained in product name
-        return normalized_medicine in normalized_product
+    def calculate_hierarchical_score(medicine_name: str, product_name: str, medicine_strength: str, product_text: str) -> tuple:
+        """
+        Calculate hierarchical score based on the specified priority order.
+        Returns (total_score, breakdown) where breakdown shows individual scores.
+        """
+        
+        # 1. EXACT NAME MATCH (40 points max)
+        normalized_medicine = normalize_name_for_exact_match(medicine_name)
+        normalized_product = normalize_name_for_exact_match(product_name)
+        
+        exact_name_score = 0
+        if normalized_medicine in normalized_product or normalized_product in normalized_medicine:
+            exact_name_score = 40  # Full points for exact match
+        elif len(normalized_medicine) > 3 and len(normalized_product) > 3:
+            # Check for substantial overlap for very close matches
+            shorter = normalized_medicine if len(normalized_medicine) < len(normalized_product) else normalized_product
+            longer = normalized_product if len(normalized_medicine) < len(normalized_product) else normalized_medicine
+            overlap_ratio = sum(1 for i in range(len(shorter)) if i < len(longer) and shorter[i] == longer[i]) / len(shorter)
+            if overlap_ratio > 0.8:
+                exact_name_score = 30  # High points for very close match
+        
+        # 2. STRENGTH MATCHING (30 points max)
+        strength_score = 0
+        extracted_medicine_strength = extract_strength(medicine_strength) if medicine_strength else ""
+        extracted_product_strength = extract_strength(product_text)
+        
+        if extracted_medicine_strength and extracted_product_strength:
+            try:
+                med_val = float(extracted_medicine_strength)
+                prod_val = float(extracted_product_strength)
+                if med_val == prod_val:
+                    strength_score = 30  # Exact strength match
+                elif abs(med_val - prod_val) / max(med_val, prod_val) <= 0.1:  # Within 10%
+                    strength_score = 20  # Close strength match
+                elif abs(med_val - prod_val) / max(med_val, prod_val) <= 0.5:  # Within 50%
+                    strength_score = 10  # Partial strength match
+            except ValueError:
+                pass
+        elif not extracted_medicine_strength and extracted_product_strength:
+            strength_score = 15  # Some strength info is better than none
+        
+        # 3. NAME SIMILARITY (20 points max)
+        name_similarity_score = 0
+        # Simple similarity calculation
+        medicine_words = set(medicine_name.lower().split())
+        product_words = set(product_name.lower().split())
+        
+        if medicine_words and product_words:
+            intersection = medicine_words.intersection(product_words)
+            union = medicine_words.union(product_words)
+            jaccard_similarity = len(intersection) / len(union) if union else 0
+            name_similarity_score = int(jaccard_similarity * 20)
+        
+        # 4. CATEGORY SIMILARITY (10 points max)
+        category_score = 0
+        # Check for common pharmaceutical terms
+        medicine_lower = medicine_name.lower()
+        product_lower = product_name.lower()
+        
+        # Common drug categories and forms
+        categories = ['tablet', 'syrup', 'capsule', 'injection', 'cream', 'ointment', 'drops']
+        forms = ['strip', 'bottle', 'vial', 'tube']
+        
+        medicine_categories = [cat for cat in categories if cat in medicine_lower]
+        product_categories = [cat for cat in categories if cat in product_lower]
+        
+        medicine_forms = [form for form in forms if form in medicine_lower]
+        product_forms = [form for form in forms if form in product_lower]
+        
+        if set(medicine_categories).intersection(set(product_categories)):
+            category_score += 5  # Same category
+        if set(medicine_forms).intersection(set(product_forms)):
+            category_score += 5  # Same form
+        
+        total_score = exact_name_score + strength_score + name_similarity_score + category_score
+        
+        breakdown = {
+            "exact_name": exact_name_score,
+            "strength": strength_score,
+            "name_similarity": name_similarity_score,
+            "category": category_score,
+            "total": total_score
+        }
+        
+        return total_score, breakdown
 
-    # Pre-analyze products for exact name matches
-    exact_matches = []
+    # Pre-analyze all products with hierarchical scoring
+    product_scores = []
+    medicine_strength = medication_details.get('strength', '') if medication_details else ''
+    
     for i, product in enumerate(products):
-        if is_exact_name_match(medicine_name, product['name']):
-            exact_matches.append(i)
-
-    for attempt in range(max_retries):
-        try:
-            # Rate limiting for OpenAI API
-            openai_rate_limiter.wait_if_needed()
-
-            if attempt > 0:
-                print(f"Retrying product selection for {medicine_name} (attempt {attempt + 1})")
-                time.sleep(random.uniform(0.5, 1.5))
-
-            client = openai.OpenAI(api_key=api_key or os.getenv('OPENAI_API_KEY'))
-
-            # Extract medication details for better matching
-            strength = medication_details.get('strength', '') if medication_details else ''
-            form = medication_details.get('form', '') if medication_details else ''
-            instructions = medication_details.get('instructions', '') if medication_details else ''
-
-            system_prompt = """You are an expert pharmacist practicing in India. Your job is to select the best matching medication product from a list of options.
-
-Consider these factors when selecting the best match:
-1. NAME SIMILARITY: How closely does the product name match the original medicine name?
-   - "high": Exact match or very close (>90% similar)
-   - "medium": Recognizably similar (70-90% similar)
-   - "low": Different but similar(<70% similar)
-
-2. STRENGTH MATCHING: Does the product strength match the prescribed strength?
-   - Extract numerical strength from product names (e.g., "500mg", "10ml")
-   - Compare with prescribed strength
-   - Consider if strength is appropriate for the medication
-
-3. FORM MATCHING: Does the product form match the prescribed form?
-   - Check for form indicators: tablet, syrup, capsule, injection, powder, etc.
-   - Compare with prescribed form (tablet, syrup, etc.)
-
-4. DIAGNOSIS RELEVANCE: If exact matches not found, consider if the medication is relevant to the diagnoses
-
-5. BRAND VS GENERIC: Consider both brand and generic equivalents
-
-IMPORTANT SCORING CRITERIA:
-- Exact name + strength + form match = Very high confidence (95-100%)
-- Exact name + strength match (form unknown) = High confidence (80-95%)
-- Exact name match (strength/form unknown) = Medium confidence (60-80%)
-- Similar name + matching strength/form = Medium confidence (50-70%)
-- Diagnosis relevance fallback = Low confidence (30-50%)
-
-Return your analysis in JSON format:
-{
-  "selected_product_index": 0,
-  "confidence_score": 85,
-  "reasoning": "Detailed explanation including strength/form matching analysis",
-  "name_similarity": "high/medium/low",
-  "strength_match": "exact/partial/none",
-  "form_match": "exact/partial/none",
-  "dosage_appropriateness": "appropriate/too_high/too_low/unknown",
-  "category_match": "exact/similar/different",
-  "alternative_suggestions": [1, 2]
-}
-
-If no good match is found, set selected_product_index to -1."""
-
-            # Prepare the product list for analysis
-            products_text = ""
-            for i, product in enumerate(products):
-                exact_indicator = " ⭐ EXACT NAME MATCH" if i in exact_matches else ""
-                products_text += f"{i}. {product['name']} - {product['url']}{exact_indicator}\n"
-
-            diagnoses_text = ", ".join(diagnoses) if diagnoses else "No specific diagnoses provided"
-
-            # Include medication details in the prompt
-            medication_info = f"""
-Prescribed Medication Details:
-- Name: {medicine_name}
-- Strength: {strength or 'Not specified'}
-- Form: {form or 'Not specified'}
-- Instructions: {instructions or 'Not specified'}
-- Diagnoses: {diagnoses_text}
-"""
-
-            # Add exact match information to the prompt
-            if exact_matches:
-                exact_match_info = f"\n⭐ EXACT NAME MATCHES FOUND: Products {', '.join(map(str, exact_matches))} contain the exact medicine name '{medicine_name}' (case-insensitive, ignoring whitespace/non-alphanumeric characters)."
-            else:
-                exact_match_info = "\n❌ No exact name matches found."
-
-            messages = [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"""{medication_info}{exact_match_info}
-
-Available products to evaluate:
-{products_text}
-
-Please analyze each product against the prescribed medication details. Consider:
-1. How well the product name matches the medicine name
-2. Whether the product strength matches the prescribed strength
-3. Whether the product form matches the prescribed form
-4. If the medication is relevant to the patient's diagnoses
-5. Overall appropriateness for the prescription
-
-⭐ PRIORITIZE products marked with "EXACT NAME MATCH" as they contain the exact medicine name.
-
-Select the best matching product with detailed reasoning."""}
-            ]
-
-            api_params = get_openai_params(model, messages, max_tokens=1024, use_json_format=True)
-            response = client.chat.completions.create(**api_params)
-
-            result = json.loads(response.choices[0].message.content)
-
-            selected_index = result.get("selected_product_index", -1)
-
-            if selected_index >= 0 and selected_index < len(products):
-                return {
-                    "product": products[selected_index],
-                    "analysis": result,
-                    "success": True
-                }
-            else:
-                return {
-                    "product": None,
-                    "analysis": result,
-                    "success": False
-                }
-
-        except openai.RateLimitError:
-            print(f"OpenAI rate limit hit for product selection of {medicine_name}, waiting before retry (attempt {attempt + 1})")
-            time.sleep(2 ** attempt)  # Exponential backoff
-        except openai.APIError as e:
-            print(f"OpenAI API error in product selection for {medicine_name} (attempt {attempt + 1}): {e}")
-            if attempt < max_retries - 1:
-                time.sleep(1)
-        except json.JSONDecodeError as e:
-            print(f"JSON decode error in product selection for {medicine_name} (attempt {attempt + 1}): {e}")
-        except Exception as e:
-            print(f"Unexpected error in product selection for {medicine_name} (attempt {attempt + 1}): {e}")
-
-    print(f"Failed to select product for {medicine_name} after {max_retries} attempts")
+        score, breakdown = calculate_hierarchical_score(
+            medicine_name, 
+            product['name'], 
+            medicine_strength, 
+            product['name']
+        )
+        product_scores.append({
+            "index": i,
+            "score": score,
+            "breakdown": breakdown,
+            "product": product
+        })
+    
+    # Sort by score (highest first)
+    product_scores.sort(key=lambda x: x["score"], reverse=True)
+    
+    # Get the best match
+    best_match = product_scores[0] if product_scores else None
+    
+    if not best_match:
+        return {
+            "product": products[0] if products else None,
+            "analysis": {"reasoning": "No products to evaluate", "confidence_score": 0},
+            "success": False
+        }
+    
+    # Convert score to confidence percentage
+    max_possible_score = 100  # 40 + 30 + 20 + 10
+    confidence_percentage = min(100, int((best_match["score"] / max_possible_score) * 100))
+    
+    # Ensure minimum confidence for exact name matches
+    if best_match["breakdown"]["exact_name"] >= 30:  # Strong exact match
+        confidence_percentage = max(confidence_percentage, 85)
+    elif best_match["breakdown"]["exact_name"] >= 20:  # Good exact match
+        confidence_percentage = max(confidence_percentage, 75)
+    
+    # Build detailed reasoning
+    breakdown = best_match["breakdown"]
+    reasoning_parts = []
+    
+    if breakdown["exact_name"] >= 30:
+        reasoning_parts.append(f"Exact name match found ({breakdown['exact_name']}/40 points)")
+    elif breakdown["exact_name"] > 0:
+        reasoning_parts.append(f"Partial name match ({breakdown['exact_name']}/40 points)")
+    else:
+        reasoning_parts.append("No exact name match (0/40 points)")
+    
+    if breakdown["strength"] >= 25:
+        reasoning_parts.append(f"Exact strength match ({breakdown['strength']}/30 points)")
+    elif breakdown["strength"] > 0:
+        reasoning_parts.append(f"Partial strength match ({breakdown['strength']}/30 points)")
+    else:
+        reasoning_parts.append("No strength match (0/30 points)")
+    
+    reasoning_parts.append(f"Name similarity: {breakdown['name_similarity']}/20 points")
+    reasoning_parts.append(f"Category similarity: {breakdown['category']}/10 points")
+    reasoning_parts.append(f"Total score: {breakdown['total']}/100")
+    
+    detailed_reasoning = ". ".join(reasoning_parts)
+    
+    # Determine categorical ratings
+    name_similarity = "high" if breakdown["exact_name"] >= 30 else ("medium" if breakdown["exact_name"] >= 10 else "low")
+    strength_match = "exact" if breakdown["strength"] >= 25 else ("partial" if breakdown["strength"] >= 10 else "none")
+    category_match = "exact" if breakdown["category"] >= 8 else ("similar" if breakdown["category"] >= 4 else "different")
+    
+    # Get alternative suggestions (top 3 excluding the selected one)
+    alternatives = [item["index"] for item in product_scores[1:4]]
+    
+    analysis = {
+        "confidence_score": confidence_percentage,
+        "reasoning": detailed_reasoning,
+        "name_similarity": name_similarity,
+        "strength_match": strength_match,
+        "form_match": "unknown",  # This could be enhanced if needed
+        "category_match": category_match,
+        "hierarchical_breakdown": breakdown,
+        "alternative_suggestions": alternatives
+    }
+    
+    print(f"  🎯 Hierarchical Scoring for '{medicine_name}':")
+    print(f"     Selected: {best_match['product']['name']}")
+    print(f"     Score breakdown: {breakdown}")
+    print(f"     Final confidence: {confidence_percentage}%")
+    
     return {
-        "product": products[0] if products else None,
-        "analysis": {"reasoning": f"Error in selection after {max_retries} attempts, using first product", "name_similarity": "unknown"},
-        "success": False
+        "product": best_match["product"],
+        "analysis": analysis,
+        "success": True
     }
 
 def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[str], model: str, medication_index: int, api_key: str = None) -> Dict[str, Any]:
