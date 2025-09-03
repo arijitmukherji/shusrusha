@@ -1028,7 +1028,7 @@ def select_best_product_match(medicine_name: str, products: List[Dict[str, str]]
         matches = re.findall(r'(\d+(?:\.\d+)?)\s*(?:mg|ml|g|mcg|units?|iu)', text.lower())
         return matches[0] if matches else ""
 
-    def calculate_hierarchical_score(medicine_name: str, product_name: str, medicine_strength: str, product_text: str) -> tuple:
+    def calculate_hierarchical_score(medicine_name: str, product_name: str, medicine_strength: str, product_text: str, medication_details: Dict[str, Any] = None) -> tuple:
         """
         Calculate hierarchical score based on the specified priority order.
         Returns (total_score, breakdown) where breakdown shows individual scores.
@@ -1083,18 +1083,26 @@ def select_best_product_match(medicine_name: str, products: List[Dict[str, str]]
         
         # 4. CATEGORY SIMILARITY (10 points max)
         category_score = 0
-        # Check for common pharmaceutical terms
+        
+        # Check for common pharmaceutical terms in medicine name AND medication details
         medicine_lower = medicine_name.lower()
-        product_lower = product_name.lower()
+        product_lower = product_text.lower()
+        
+        # Include medication details in the medicine text for better category matching
+        medicine_form = medication_details.get('form', '') if medication_details else ''
+        medicine_instructions = medication_details.get('instructions', '') if medication_details else ''
+        
+        # Combine medicine name with available details for comprehensive matching
+        combined_medicine_text = f"{medicine_name} {medicine_form} {medicine_instructions}".lower()
         
         # Common drug categories and forms
-        categories = ['tablet', 'syrup', 'capsule', 'injection', 'cream', 'ointment', 'drops']
-        forms = ['strip', 'bottle', 'vial', 'tube']
+        categories = ['tablet', 'syrup', 'capsule', 'injection', 'cream', 'ointment', 'drops', 'gel', 'powder', 'solution']
+        forms = ['strip', 'bottle', 'vial', 'tube', 'box', 'sachet', 'ampoule']
         
-        medicine_categories = [cat for cat in categories if cat in medicine_lower]
+        medicine_categories = [cat for cat in categories if cat in combined_medicine_text]
         product_categories = [cat for cat in categories if cat in product_lower]
         
-        medicine_forms = [form for form in forms if form in medicine_lower]
+        medicine_forms = [form for form in forms if form in combined_medicine_text]
         product_forms = [form for form in forms if form in product_lower]
         
         if set(medicine_categories).intersection(set(product_categories)):
@@ -1123,7 +1131,8 @@ def select_best_product_match(medicine_name: str, products: List[Dict[str, str]]
             medicine_name, 
             product['name'], 
             medicine_strength, 
-            product['name']
+            product['name'],
+            medication_details
         )
         product_scores.append({
             "index": i,
