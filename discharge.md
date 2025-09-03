@@ -1,75 +1,84 @@
 # SHUSRUSHA
-A UNIT OF SHUSRUSHA NURSING HOME PVT. LTD.
+## A UNIT OF SHUSRUSHA NURSING HOME PVT. LTD.
 P-290, C.I.T. Scheme VIM, Swami Swarupananda Sarani, Kolkata - 700 054  
 Phone : 2362 8863, 2362 8430, 2364 8910
 
-## DISCHARGE / TRANSFER / DISCHARGE AGAINST MEDICAL ADVISE CERTIFICATE
+### DISCHARGE / TRANSFER / DISCHARGE AGAINST MEDICAL ADVISE CERTIFICATE
 
-**Name:** Mrs. Bina Jaicwal  
-**UHID No.:** 191020039341  
-**Bed No.:** 109  
-**Sex:** Female  
-**Age:** 64 yrs  
-**Address:** C/o Mr. Rohit Jaicwal, 2/3, Bholanath Sarani Road, Teghoria, Rajarhat, Gopalpur, Baguihati 700157  
+**NAME:** SRIKANTA BASU MALLIK  
+**UHID NO:** 191020029133-1  
+**BED NO:** 206  
+**SEX:** MALE  
+**AGE:** 79 yrs  
+**ADDRESS:** P-185, C.I.T. ROAD SCHEME-VIM, NEAR INDIAN OVERSEAS BANK, KANKURGACHI, PHOOLBAGAN, 700054, KOLKATA, W.B.
 
-**Date of Admission:** 24/8/15  
-**Time of Admission:** 10:00 am  
-**Date of Discharge:** 26/8/15  
+**Date of Admission:** 16/08/2023  
+**Time of Admission:** 3:00 AM  
+**Date of Discharge:**  
 **Time of Discharge:**  
 
-I, Dr. Sunil Tibrewal hereby certify that the above mentioned patient was under my treatment in this Nursing Home.
+---
+
+I, Dr. **Sibani Bhattacharya** hereby certify that the above mentioned patient was under my treatment in this Nursing Home.
 
 ### REASONS FOR ADMISSION : PRESENTING COMPLAINTS
-- Vomiting, abdominal distension - swell
+
+- Patient found unconscious at home, cold defecation and unrestrained vomiting (duration unknown). Pt. drowsy but arousable. Extremely dehydrated. SpO2 - 91% to 92% in RA on admission. Patient unable to lift both legs up.
 
 ### FINAL DIAGNOSIS
-- Subacute intestinal obstruction
-- HTN
-- Hypothyroid
-- Hepatitis C Positive
+
+- Lower Respiratory Tract Infection.
+- ? Seizure / ? Syncope
 
 **ICD 10 CODE:**  
 
 **H/O ALCOHOLISM / TOBACCO / OTHERS**  
-**MLC Y / N** Yes / No / Not Known ✔
+MLC Y / N ✔  
+Yes / No / Not Known
 
 ---
-
-### NAME OF THE PATIENT: 
 
 ### SIGNIFICANT PAST MEDICAL AND SURGICAL AND ALLERGY OR FAMILY HISTORY
-- H/O TAH & BSO -> Hernia & Laceration, (R) nephrectomy
+
+- HTN
 
 ### SUMMARY OF KEY INVESTIGATION REPORT TO ARRIVE AT THE DIAGNOSIS
-- **CECT:** Collapsed long segment ileum. Sec adhered to (R) suprarenal gland.
+
+- Enclosed
 
 ### SUMMARY OF TREATMENT [NAME OF THE PROCEDURES/SURGERIES (IF ANY)]
-- Referred Doctors Name:  
-- Specialist Name:  
-- Specialist:  
+
+**Referred Doctors Name:**  
+- Dr. S.S. Chowdhury - Neurologist  
+- Dr. Ujwalta Das - Neurologist  
+- Dr. Saikat Nag - Pulmonologist  
 
 ### NOTES ON MEDICAL MANAGEMENT
-- Received Cap. Vizylac, Rantac, ORS, Pan 40, Volini gel, Relent.
+
+- Patient admitted with above complaints. On initial evaluation, Hb WBC - 20600, CRP - 61. Pt was started on IV antibiotics, IVF and nebulisation. Patient gradually improved. His urine for toxicology panel was positive for Benzodiazepines. His EEG, Brain was suggestive of slow waves from temporo-parietal region (7-15% of Brain's parenchyma shows white matter ischemic changes).
 
 **Medical Treatment**  
-- Blood Transfusion:  
-  - PRBC: Yes / No .......Nos  
-  - FFP: Yes / No .......Nos  
-  - Human Albumin: Yes / No .......Nos  
-  - TPN: Yes / No .......Nos  
-  - Pethidine/Fentanyl/Morphin: Yes / No .......Nos  
+- **Blood Transfusion**  
+  - PRBC: Yes / No  
+  - FFP: Yes / No  
+  - Human Albumin: Yes / No  
+  - TPN: Yes / No  
+  - Pethidine/Fentanyl/Morphin: Yes / No  
 
-- Antibiotic Used:  
-- Anti Emetic Used:  
-- PPI:  
+- **Antibiotic Used:**  
+- **Anti Emetic Used:**  
+- **PPI:**  
+- **Other Supportive Medicines:**  
 
-**Other Supportive Medicines:**  
+- **Nebulisation:** Yes / No  
+- **Oxygen:** Yes / No  
+- **NIV Support:** Yes / No  
+- **Phototherapy:** Yes / No  
 
 ---
 
-### NAME OF THE PATIENT: 
+### PROCEDURES
 
-### Procedures:
 - Intubation: Yes / No  
 - Central Line: Yes / No  
 - Catheterisation: Yes / No  
@@ -82,12 +91,12 @@ I, Dr. Sunil Tibrewal hereby certify that the above mentioned patient was under 
 - Pleural Tapping: Yes / No  
 - Others:  
 
-### SURGICAL MANAGEMENT : NAME OF THE SURGERY / PROCEDURE
-- Patient responded to conservative treatment
-
 ### COMPLICATIONS IN THE COURSE OF HOSPITALISATION
 
+- Seizure
+
 ### PATIENT CONDITION AT THE TIME OF DISCHARGE
+
 - AMBULATORY ✔  
 - NON AMBULATORY  
 - WITH OXYGEN  
@@ -95,40 +104,42 @@ I, Dr. Sunil Tibrewal hereby certify that the above mentioned patient was under 
 - ANY OTHER SUPPORT  
 
 ### WHEN & HOW TO OBTAIN URGENT CARE & FOLLOW UP ADVICE
+
 - FEVER ✔  
-- WOUND OOZING ✔  
-- SOB  
+- WOUND OOZING  
+- SOB ✔  
 - SURGICAL SITE PAIN  
 - URINE RETENTION  
 - BLEEDING  
 - ANY OTHER  
 
-### FOLLOW UP ADVICE
+**FOLLOW UP ADVICE**  
+- Bid to CBC, CRP, Na+/K+/Urea/Creatinine  
+- Review with Dr. Sibani Bhattacharya after 7 days or earlier if condition deteriorates.  
+- Review with Neurologist & Cardiologist after discharge.
 
 ---
 
-### NAME OF THE PATIENT: 
-
 ### ADVICE ON DISCHARGE
-1. Ambulatory / Semisolid diet
-2. Tab Amlod 5 1 tab od after BF x cont
-3. Tab Thyroxin 100 1 tab od before BF x cont
-4. Tab Telma 40 1 tab od after dinner x cont
-5. Tab Pan 40 - odac x cont 10 days
-6. Tab Ondem md 4 mg - 6 tab x 3 days
-7. Syp. Mucaine 25 ml syrup t 1 cons
-   Aluminium citrate at bedtime x cont 7 days
 
-8. After 7 days
-   - Review with:
-     - @ Dr. P. Boddar - Liver specialist for Hepatitis C (HS DM)
-     - PET CT scan for evaluation of secession to (R) suprarenal gland
-     - Review for BP after 2 weeks
-       attend earlier / ER SOS
+- Tab. Pantocid DSR - 1 tab BD for 10 days  
+- Tab. Ursimax D - 1 tab OD HS (10 PM) to continue  
+- Tab. Olkem AM 20 (20/5) - 1 tab at 9 AM - Continue  
+- Tab. Naxdom Plus - 1 tab twice daily for 10 days  
+- Tab. Nikoran (10) - twice daily - continue  
+- Tab. Ecosprin D - 1 tab at bed for 3 months  
+- Tab. Rosavel (10) - 1 tab OD HS (10 PM) - Continue  
+- Tab. Levipil (500) twice daily - continue  
+- Tab. Nitrosun (2.5) - 8 PM and 9 PM  
+
+- Bid to CBC, CRP, Na+/K+/Urea/Creatinine after 5 days.  
+- Review with Dr. Sibani Bhattacharya after 7 days of discharge.  
+- Review with Neurologist & Cardiologist after discharge.
 
 **Signature of the Patient / Attendant**  
 **Signature of the Treating Doctor / RMO**  
-**Reg. No.**  
-**Date:** 26/8/2015
+**Reg. No.**
 
-FORM NO. : 20 (New)
+---
+
+FORM NO.: 20 (New)
