@@ -73,7 +73,7 @@ def get_openai_params(model: str, messages: list, max_tokens: int = 2048, temper
     
     return base_params
 
-def ocr_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
+def ocr_node(state: GraphState, model: str = "gpt-4o-mini", api_key: str = None) -> GraphState:
     """
     Process images and extract text using GPT-4 Vision.
     """
@@ -87,7 +87,7 @@ def ocr_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
       simple markdown document with all the contents with the same content as the original. For 
       prescribed medications, "Tab" is often written to look like "76" """
     
-    client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+    client = openai.OpenAI(api_key=api_key or os.getenv('OPENAI_API_KEY'))
     
     # Process images
     image_contents = []
@@ -138,7 +138,7 @@ def ocr_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
     state["markdown"] = markdown_text
     return state
 
-def extract_diagnoses_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
+def extract_diagnoses_node(state: GraphState, model: str = "gpt-4o-mini", api_key: str = None) -> GraphState:
     """
     Extract diagnoses and lab tests from the markdown text.
     """
@@ -147,7 +147,7 @@ def extract_diagnoses_node(state: GraphState, model: str = "gpt-4o-mini") -> Gra
     system_prompt = """You are an expert medical doctor practising in Kolkata India. You have been given a hospital discharge report of a patient in simple mardown text format. Your job is to identify all the relevant medical terms in the document related to a) diagnosis names b) lab test names from the document. Ignore all medicine names. Keep in mind common terminology used in that part of the world. Return a JSON structure of the form
 {"diagnoses": ["diagnosis term 1", "diagnosis term 2", ...], "lab_tests":["lab test name 1", "lab test name 2", ...]}"""
     
-    client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+    client = openai.OpenAI(api_key=api_key or os.getenv('OPENAI_API_KEY'))
     
     try:
         messages = [
@@ -171,7 +171,7 @@ def extract_diagnoses_node(state: GraphState, model: str = "gpt-4o-mini") -> Gra
     state["diagnoses"] = diagnoses_json
     return state
 
-def extract_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
+def extract_medications_node(state: GraphState, model: str = "gpt-4o-mini", api_key: str = None) -> GraphState:
     """
     Extract medications from the markdown text.
     """
@@ -184,7 +184,7 @@ and not contain other information like its strength or form factor (tab/table, c
 syr/syrup, pdr/powder etc.). Finally append a small description to the instructions if they
 are not easily understandable by a layman"""
 
-    client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+    client = openai.OpenAI(api_key=api_key or os.getenv('OPENAI_API_KEY'))
     
     try:
         messages = [
@@ -289,9 +289,9 @@ def fetch_pharmeasy_content(medicine_name: str, max_retries: int = 3) -> str:
     print(f"Failed to fetch content for {medicine_name} after {max_retries} attempts")
     return ""
 
-def parse_pharmeasy_products(html_content: str, model: str = "gpt-4o-mini", max_retries: int = 3) -> List[Dict[str, str]]:
+def parse_pharmeasy_products(html_content: str, model: str = "gpt-4o-mini", max_retries: int = 3, api_key: str = None) -> List[Dict[str, str]]:
     """
-    Use LLM to parse PharmeEasy HTML and extract product listings with retry logic.
+    Use LLM to parse Pharmeasy HTML and extract product listings with retry logic.
     """
     for attempt in range(max_retries):
         try:
@@ -302,7 +302,7 @@ def parse_pharmeasy_products(html_content: str, model: str = "gpt-4o-mini", max_
                 print(f"Retrying OpenAI API call for HTML parsing (attempt {attempt + 1})")
                 time.sleep(random.uniform(0.5, 1.5))
             
-            client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
+            client = openai.OpenAI(api_key=api_key or os.getenv('OPENAI_API_KEY'))
             
             system_prompt = """You are an expert web scraper. Parse this HTML content from Pharmeasy.in search results.
 
@@ -356,7 +356,7 @@ If no products found, return empty products array."""
                         "url": url
                     })
             
-            print(f"Extracted {len(cleaned_products)} products from PharmeEasy page")
+            print(f"Extracted {len(cleaned_products)} products from Pharmeasy page")
             return cleaned_products
             
         except openai.RateLimitError:
@@ -371,7 +371,7 @@ If no products found, return empty products array."""
         except Exception as e:
             print(f"Unexpected error in HTML parsing (attempt {attempt + 1}): {e}")
     
-    print(f"Failed to parse PharmeEasy HTML after {max_retries} attempts")
+    print(f"Failed to parse Pharmeasy HTML after {max_retries} attempts")
     return []
 
 def wrap_medication_items_in_lists(html_content: str) -> str:
@@ -530,7 +530,7 @@ def add_medication_pills_to_html(html_content: str, fixed_medications: Dict[str,
     
     return html_content
 
-def add_summary_pills_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
+def add_summary_pills_node(state: GraphState, model: str = "gpt-4o-mini", api_key: str = None) -> GraphState:
     """
     Generate enhanced HTML summary with inline medication pills as list items.
     """
@@ -764,7 +764,7 @@ def add_summary_pills_node(state: GraphState, model: str = "gpt-4o-mini") -> Gra
         
         <div class="footer">
             <p>Generated with {model} | Enhanced Medical Document Processing</p>
-            <p><small>Medication information sourced from PharmeEasy.in</small></p>
+            <p><small>Medication information sourced from Pharmeasy.in</small></p>
         </div>
     </body>
     </html>
@@ -879,81 +879,140 @@ def generate_medications_table(fixed_medications: Dict[str, Any]) -> str:
     
     return table_html
 
-def select_best_product_match(medicine_name: str, products: List[Dict[str, str]], diagnoses: List[str], model: str = "gpt-4o-mini", max_retries: int = 3) -> Dict[str, Any]:
+def select_best_product_match(medicine_name: str, products: List[Dict[str, str]], diagnoses: List[str], model: str = "gpt-4o-mini", max_retries: int = 3, medication_details: Dict[str, Any] = None, api_key: str = None) -> Dict[str, Any]:
     """
-    Use LLM to select the best matching product based on medicine name similarity, 
-    diagnoses relevance, drug category, strength, etc. with retry logic.
+    Use LLM to select the best matching product based on medicine name similarity,
+    diagnoses relevance, drug category, strength, form, etc. with retry logic.
+    Includes enhanced exact name matching with case-insensitive and whitespace-tolerant comparison.
     """
+    def normalize_text(text: str) -> str:
+        """Normalize text by removing non-alphanumeric characters and converting to lowercase."""
+        import re
+        return re.sub(r'[^a-zA-Z0-9]', '', text).lower()
+
+    def is_exact_name_match(medicine_name: str, product_name: str) -> bool:
+        """Check if medicine name is fully contained in product name (case-insensitive, whitespace-tolerant)."""
+        normalized_medicine = normalize_text(medicine_name)
+        normalized_product = normalize_text(product_name)
+
+        # Check if medicine name is fully contained in product name
+        return normalized_medicine in normalized_product
+
+    # Pre-analyze products for exact name matches
+    exact_matches = []
+    for i, product in enumerate(products):
+        if is_exact_name_match(medicine_name, product['name']):
+            exact_matches.append(i)
+
     for attempt in range(max_retries):
         try:
             # Rate limiting for OpenAI API
             openai_rate_limiter.wait_if_needed()
-            
+
             if attempt > 0:
                 print(f"Retrying product selection for {medicine_name} (attempt {attempt + 1})")
                 time.sleep(random.uniform(0.5, 1.5))
-            
-            client = openai.OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
-            
+
+            client = openai.OpenAI(api_key=api_key or os.getenv('OPENAI_API_KEY'))
+
+            # Extract medication details for better matching
+            strength = medication_details.get('strength', '') if medication_details else ''
+            form = medication_details.get('form', '') if medication_details else ''
+            instructions = medication_details.get('instructions', '') if medication_details else ''
+
             system_prompt = """You are an expert pharmacist practicing in India. Your job is to select the best matching medication product from a list of options.
 
 Consider these factors when selecting the best match:
-1. NAME SIMILARITY: How closely does the product name match the original medicine name? Either fully
-or does it contain the original name as a substring?
+1. NAME SIMILARITY: How closely does the product name match the original medicine name?
    - "high": Exact match or very close (>90% similar)
-   - "medium": Recognizably similar (70-90% similar) 
+   - "medium": Recognizably similar (70-90% similar)
    - "low": Different but similar(<70% similar)
-2. STRENGTH/DOSAGE: Is the strength appropriate and commonly prescribed?
-3. FORMULATION: Is the formulation (tablet, syrup, injection, etc.) appropriate?
-4. BRAND VS GENERIC: Consider both brand and generic equivalents
-5. COMMON USAGE: Is this a commonly prescribed medication for the given diagnoses?
 
-IMPORTANT: When evaluating name similarity, consider:
-- Exact matches or minor variations (like "Paracetamol" vs "Paracetamol 500mg tablet") should be "high"
-- Same drug different brand (like "Paracetamol" vs "Crocin") should be "medium" 
-- Single character differences should be "high" similarity. This includes origianal name as a substring
-- Generic vs brand names of same drug should be "medium" to "high"
+2. STRENGTH MATCHING: Does the product strength match the prescribed strength?
+   - Extract numerical strength from product names (e.g., "500mg", "10ml")
+   - Compare with prescribed strength
+   - Consider if strength is appropriate for the medication
+
+3. FORM MATCHING: Does the product form match the prescribed form?
+   - Check for form indicators: tablet, syrup, capsule, injection, powder, etc.
+   - Compare with prescribed form (tablet, syrup, etc.)
+
+4. DIAGNOSIS RELEVANCE: If exact matches not found, consider if the medication is relevant to the diagnoses
+
+5. BRAND VS GENERIC: Consider both brand and generic equivalents
+
+IMPORTANT SCORING CRITERIA:
+- Exact name + strength + form match = Very high confidence (95-100%)
+- Exact name + strength match (form unknown) = High confidence (80-95%)
+- Exact name match (strength/form unknown) = Medium confidence (60-80%)
+- Similar name + matching strength/form = Medium confidence (50-70%)
+- Diagnosis relevance fallback = Low confidence (30-50%)
 
 Return your analysis in JSON format:
 {
   "selected_product_index": 0,
   "confidence_score": 85,
-  "reasoning": "Detailed explanation of why this product was selected",
+  "reasoning": "Detailed explanation including strength/form matching analysis",
   "name_similarity": "high/medium/low",
+  "strength_match": "exact/partial/none",
+  "form_match": "exact/partial/none",
   "dosage_appropriateness": "appropriate/too_high/too_low/unknown",
   "category_match": "exact/similar/different",
   "alternative_suggestions": [1, 2]
 }
 
 If no good match is found, set selected_product_index to -1."""
-            
+
             # Prepare the product list for analysis
             products_text = ""
             for i, product in enumerate(products):
-                products_text += f"{i}. {product['name']} - {product['url']}\n"
-            
+                exact_indicator = " ⭐ EXACT NAME MATCH" if i in exact_matches else ""
+                products_text += f"{i}. {product['name']} - {product['url']}{exact_indicator}\n"
+
             diagnoses_text = ", ".join(diagnoses) if diagnoses else "No specific diagnoses provided"
-            
+
+            # Include medication details in the prompt
+            medication_info = f"""
+Prescribed Medication Details:
+- Name: {medicine_name}
+- Strength: {strength or 'Not specified'}
+- Form: {form or 'Not specified'}
+- Instructions: {instructions or 'Not specified'}
+- Diagnoses: {diagnoses_text}
+"""
+
+            # Add exact match information to the prompt
+            if exact_matches:
+                exact_match_info = f"\n⭐ EXACT NAME MATCHES FOUND: Products {', '.join(map(str, exact_matches))} contain the exact medicine name '{medicine_name}' (case-insensitive, ignoring whitespace/non-alphanumeric characters)."
+            else:
+                exact_match_info = "\n❌ No exact name matches found."
+
             messages = [
                 {"role": "system", "content": system_prompt},
-                {"role": "user", "content": f"""Please analyze and select the best matching product:
+                {"role": "user", "content": f"""{medication_info}{exact_match_info}
 
-Original medicine name: {medicine_name}
-Patient diagnoses: {diagnoses_text}
-
-Available products:
+Available products to evaluate:
 {products_text}
 
-Select the best match considering name similarity, appropriateness for the diagnoses, dosage strength, and common medical practice in India. Pay special attention to accurate name similarity scoring."""}
+Please analyze each product against the prescribed medication details. Consider:
+1. How well the product name matches the medicine name
+2. Whether the product strength matches the prescribed strength
+3. Whether the product form matches the prescribed form
+4. If the medication is relevant to the patient's diagnoses
+5. Overall appropriateness for the prescription
+
+⭐ PRIORITIZE products marked with "EXACT NAME MATCH" as they contain the exact medicine name.
+
+Select the best matching product with detailed reasoning."""}
             ]
-            
+
             api_params = get_openai_params(model, messages, max_tokens=1024, use_json_format=True)
             response = client.chat.completions.create(**api_params)
-            
+
             result = json.loads(response.choices[0].message.content)
-            
+
             selected_index = result.get("selected_product_index", -1)
-            
+
             if selected_index >= 0 and selected_index < len(products):
                 return {
                     "product": products[selected_index],
@@ -966,7 +1025,7 @@ Select the best match considering name similarity, appropriateness for the diagn
                     "analysis": result,
                     "success": False
                 }
-                
+
         except openai.RateLimitError:
             print(f"OpenAI rate limit hit for product selection of {medicine_name}, waiting before retry (attempt {attempt + 1})")
             time.sleep(2 ** attempt)  # Exponential backoff
@@ -978,7 +1037,7 @@ Select the best match considering name similarity, appropriateness for the diagn
             print(f"JSON decode error in product selection for {medicine_name} (attempt {attempt + 1}): {e}")
         except Exception as e:
             print(f"Unexpected error in product selection for {medicine_name} (attempt {attempt + 1}): {e}")
-    
+
     print(f"Failed to select product for {medicine_name} after {max_retries} attempts")
     return {
         "product": products[0] if products else None,
@@ -986,9 +1045,9 @@ Select the best match considering name similarity, appropriateness for the diagn
         "success": False
     }
 
-def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[str], model: str, medication_index: int) -> Dict[str, Any]:
+def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[str], model: str, medication_index: int, api_key: str = None) -> Dict[str, Any]:
     """
-    Process a single medication to find matching products on PharmeEasy.
+    Process a single medication to find matching products on Pharmeasy.
     This function is designed to be run in parallel.
     """
     base_medicine_name = medication.get('name', 'Unknown')
@@ -1029,7 +1088,7 @@ def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[s
         
         if html_content:
             # Parse products from the HTML
-            products = parse_pharmeasy_products(html_content, model)
+            products = parse_pharmeasy_products(html_content, model, api_key=api_key)
             
             if products:
                 print(f"Found {len(products)} products, selecting best match...")
@@ -1039,7 +1098,9 @@ def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[s
                     base_medicine_name,  # Use original name for LLM analysis
                     products, 
                     diagnoses_list, 
-                    model
+                    model,
+                    medication_details=medication,  # Pass full medication details
+                    api_key=api_key
                 )
                 
                 if selection_result["success"] and selection_result["product"]:
@@ -1053,6 +1114,8 @@ def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[s
                         "selection_confidence": analysis.get("confidence_score", 0),
                         "selection_reasoning": analysis.get("reasoning", ""),
                         "name_similarity": analysis.get("name_similarity", "unknown"),
+                        "strength_match": analysis.get("strength_match", "unknown"),  # NEW
+                        "form_match": analysis.get("form_match", "unknown"),          # NEW
                         "dosage_appropriateness": analysis.get("dosage_appropriateness", "unknown"),
                         "category_match": analysis.get("category_match", "unknown")
                     })
@@ -1133,7 +1196,7 @@ def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[s
         })
         return medication_copy
 
-def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> GraphState:
+def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini", api_key: str = None) -> GraphState:
     """
     Fetch Pharmeasy content for each medication and use LLM to select the best matching product.
     Uses parallel processing to significantly reduce processing time.
@@ -1177,7 +1240,8 @@ def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini") -> Graph
                 medication, 
                 diagnoses_list, 
                 model, 
-                i
+                i,
+                api_key
             )
             future_to_index[future] = i
             future_to_medication[future] = medicine_name
@@ -1280,13 +1344,13 @@ class AppGraph:
     def __init__(self):
         self.state = {}
     
-    def run_node(self, node_name: str, input_data=None, model: str = "gpt-4o-mini"):
+    def run_node(self, node_name: str, input_data=None, model: str = "gpt-4o-mini", api_key: str = None):
         """
         Run a specific node in the graph with the given input data.
         """
         if input_data is not None:
             if node_name == "OCR":
-                self.state = ocr_node({"images": input_data}, model)
+                self.state = ocr_node({"images": input_data}, model, api_key=api_key)
                 return self.state.get("markdown", "")
             else:
                 # For other nodes, input_data might be used differently
@@ -1296,19 +1360,19 @@ class AppGraph:
             # Require input_data for OCR
             if input_data is None:
                 raise ValueError("OCR node requires input_data (list of image paths)")
-            self.state = ocr_node({"images": input_data}, model)
+            self.state = ocr_node({"images": input_data}, model, api_key=api_key)
             return self.state.get("markdown", "")
         elif node_name == "ExtractDiagnoses":
-            self.state = extract_diagnoses_node(self.state, model)
+            self.state = extract_diagnoses_node(self.state, model, api_key=api_key)
             return self.state.get("diagnoses", {})
         elif node_name == "ExtractMedications":
-            self.state = extract_medications_node(self.state, model)
+            self.state = extract_medications_node(self.state, model, api_key=api_key)
             return self.state.get("medications", {})
         elif node_name == "FixMedications":
-            self.state = fix_medications_node(self.state, model)
+            self.state = fix_medications_node(self.state, model, api_key=api_key)
             return self.state.get("fixed_medications", {})
         elif node_name == "AddSummaryPills":
-            self.state = add_summary_pills_node(self.state, model)
+            self.state = add_summary_pills_node(self.state, model, api_key=api_key)
             return self.state.get("html_summary", "")
         else:
             raise ValueError(f"Unknown node: {node_name}")

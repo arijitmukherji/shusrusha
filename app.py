@@ -184,18 +184,22 @@ def main():
     st.markdown('<h1 class="main-header">🏥 Shusrusha Medical Document Processor</h1>', unsafe_allow_html=True)
     st.markdown("Convert discharge summary images into interactive HTML reports with medication analysis")
     
-    # Sidebar for configuration
+    # API Key check and prompt (global for main)
+    api_key = os.getenv('OPENAI_API_KEY')
     with st.sidebar:
         st.header("⚙️ Configuration")
-        
-        # API Key check
-        api_key = os.getenv('OPENAI_API_KEY')
         if api_key:
             st.success("✅ OpenAI API Key loaded")
         else:
-            st.error("❌ OpenAI API Key not found")
-            st.info("Add your OpenAI API key to a .env file:\n`OPENAI_API_KEY=your_key_here`")
-            return
+            st.warning("No .env file or API key found.")
+            api_key = st.text_input(
+                "🔑 Enter your OpenAI API Key (will NOT be saved)",
+                type="password",
+                help="Your key is only kept in memory for this session."
+            )
+            if not api_key:
+                st.stop()
+            st.success("✅ OpenAI API Key accepted (in memory only)")
         
         # Model selection
         st.subheader("🤖 Model Configuration")
@@ -418,7 +422,7 @@ def main():
                         process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_model, 
                                         save_files, open_files, show_debug, 
                                         run_diagnoses, run_medications, run_pharmacy, run_summary,
-                                        processing_container)  # Pass the container to clear it later
+                                        api_key, processing_container)  # Pass the container to clear it later
         else:
             # Clear the processing container and show completion buttons
             with processing_container.container():
@@ -479,7 +483,7 @@ def add_processing_log(message, log_type="info"):
     })
 
 def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_model, save_files, open_files, show_debug, 
-                     run_diagnoses, run_medications, run_pharmacy, run_summary, processing_container=None):
+                     run_diagnoses, run_medications, run_pharmacy, run_summary, api_key, processing_container=None):
     """Process the uploaded documents through the entire pipeline"""
     
     # Initialize session state for results
@@ -528,7 +532,7 @@ def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_mode
             progress_bar.progress(0.2)
             
             with st.spinner("Extracting text from images..."):
-                markdown = app_graph.run_node("OCR", image_paths, ocr_model)
+                markdown = app_graph.run_node("OCR", image_paths, ocr_model, api_key=api_key)
                 
                 # Clean markdown
                 markdown = clean_markdown(markdown)
@@ -560,7 +564,7 @@ def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_mode
                 progress_bar.progress(0.4)
                 
                 with st.spinner("Extracting medical diagnoses..."):
-                    diagnoses = app_graph.run_node("ExtractDiagnoses", model=extraction_model)
+                    diagnoses = app_graph.run_node("ExtractDiagnoses", model=extraction_model, api_key=api_key)
                     st.session_state.processing_results['diagnoses'] = diagnoses
                     add_processing_log("✅ Diagnoses extraction completed", "success")
                 
@@ -581,7 +585,7 @@ def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_mode
                 progress_bar.progress(0.6)
                 
                 with st.spinner("Extracting medications..."):
-                    medications = app_graph.run_node("ExtractMedications", model=extraction_model)
+                    medications = app_graph.run_node("ExtractMedications", model=extraction_model, api_key=api_key)
                     st.session_state.processing_results['medications'] = medications
                     add_processing_log("✅ Medications extraction completed", "success")
                 
@@ -603,7 +607,7 @@ def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_mode
                     progress_bar.progress(0.8)
                     
                     with st.spinner("Finding medication links..."):
-                        fixed_medications = app_graph.run_node("FixMedications", model=pharmacy_model)
+                        fixed_medications = app_graph.run_node("FixMedications", model=pharmacy_model, api_key=api_key)
                         st.session_state.processing_results['fixed_medications'] = fixed_medications
                         add_processing_log("✅ PharmeEasy integration completed", "success")
                     
@@ -629,7 +633,7 @@ def process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_mode
                 progress_bar.progress(1.0)
                 
                 with st.spinner("Creating interactive HTML report..."):
-                    html_summary = app_graph.run_node("AddSummaryPills")
+                    html_summary = app_graph.run_node("AddSummaryPills", api_key=api_key)
                     
                     if save_files:
                         save_file("summary.html", html_summary)
