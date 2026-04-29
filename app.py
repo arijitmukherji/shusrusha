@@ -179,224 +179,279 @@ st.markdown("""
     }
 </style>""", unsafe_allow_html=True)
 
+# ── Enhanced design system override ─────────────────────────────────────────
+st.markdown("""
+<style>
+    /* Design tokens */
+    :root {
+        --brand:       #1a8754;
+        --brand-light: #d1f0e0;
+        --brand-dark:  #145f3c;
+        --warn:        #f59e0b;
+        --danger:      #dc3545;
+        --surface:     #ffffff;
+        --surface-alt: #f8fafb;
+        --border:      #e2e8f0;
+        --text:        #1e293b;
+        --text-muted:  #64748b;
+        --radius:      10px;
+        --shadow-sm:   0 1px 3px rgba(0,0,0,.07);
+        --shadow-md:   0 4px 12px rgba(0,0,0,.10);
+    }
+
+    /* Page background */
+    .stApp { background: #f0f4f8 !important; }
+
+    /* Remove default Streamlit top padding */
+    .block-container { padding-top: 1rem !important; }
+
+    /* ── App header ── */
+    .app-header {
+        background: linear-gradient(135deg, #145f3c 0%, #1a8754 55%, #22c55e 100%);
+        border-radius: var(--radius);
+        padding: 1.4rem 2rem;
+        margin-bottom: 1.5rem;
+        color: white;
+        box-shadow: var(--shadow-md);
+    }
+    .app-header h1 { color: white !important; margin: 0 0 .25rem; font-size: 1.75rem; font-weight: 700; }
+    .app-header p  { color: rgba(255,255,255,.85); margin: 0; font-size: 0.9rem; }
+
+    /* ── Section headings ── */
+    .section-label {
+        font-size: 0.68rem; font-weight: 700; letter-spacing: .08em;
+        text-transform: uppercase; color: var(--text-muted); margin: 1.1rem 0 .4rem;
+    }
+
+    /* ── Cards ── */
+    .card {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: 1rem 1.2rem;
+        margin-bottom: .75rem; box-shadow: var(--shadow-sm);
+    }
+
+    /* ── Medication card ── */
+    .med-card {
+        background: var(--surface); border: 1px solid var(--border);
+        border-radius: var(--radius); padding: .9rem 1.1rem;
+        margin-bottom: .6rem; box-shadow: var(--shadow-sm);
+        transition: box-shadow .15s ease;
+    }
+    .med-card:hover { box-shadow: var(--shadow-md); }
+    .med-card-high   { border-left: 4px solid var(--brand); }
+    .med-card-medium { border-left: 4px solid var(--warn); }
+    .med-card-low    { border-left: 4px solid var(--danger); }
+    .med-name  { font-size: 1rem; font-weight: 700; color: var(--brand-dark); margin-bottom: .35rem; }
+    .med-meta  { display: flex; flex-wrap: wrap; gap: .4rem 1.1rem; font-size: .85rem; color: var(--text-muted); }
+    .med-meta strong { color: var(--text); }
+
+    /* ── Confidence badge ── */
+    .badge { display: inline-block; padding: .15rem .55rem; border-radius: 999px;
+             font-size: .72rem; font-weight: 700; color: white; vertical-align: middle; }
+    .badge-high   { background: var(--brand); }
+    .badge-medium { background: var(--warn); }
+    .badge-low    { background: var(--danger); }
+
+    /* ── Diagnosis / Lab chips ── */
+    .chip { display: inline-block; padding: .25rem .65rem; border-radius: 999px;
+            font-size: .82rem; font-weight: 500; margin: .15rem; }
+    .chip-green { background: var(--brand-light); color: var(--brand-dark); }
+    .chip-blue  { background: #dbeafe; color: #1d4ed8; }
+
+    /* ── Metric cards ── */
+    [data-testid="stMetric"] {
+        background: var(--surface) !important; border: 1px solid var(--border) !important;
+        border-radius: var(--radius) !important; padding: .6rem .8rem !important;
+        box-shadow: var(--shadow-sm) !important;
+    }
+    [data-testid="stMetricLabel"] { font-size: .78rem !important; color: var(--text-muted) !important; }
+    [data-testid="stMetricValue"] { font-size: 1.45rem !important; color: var(--text) !important; font-weight: 700 !important; }
+
+    /* ── Progress bar ── */
+    [data-testid="stProgressBar"] > div > div { background: var(--brand) !important; border-radius: 4px; }
+
+    /* ── Tabs ── */
+    .stTabs [data-baseweb="tab-list"] { gap: 4px; border-bottom: 2px solid var(--border); }
+    .stTabs [data-baseweb="tab"] {
+        border-radius: 6px 6px 0 0; padding: .4rem .9rem;
+        font-size: .85rem; font-weight: 500; color: var(--text-muted);
+        background: transparent; border: 1px solid transparent;
+    }
+    .stTabs [aria-selected="true"] {
+        color: var(--brand-dark) !important; background: var(--surface) !important;
+        border-color: var(--border) !important; border-bottom-color: white !important;
+    }
+
+    /* ── Sidebar ── */
+    [data-testid="stSidebar"] { background: #f8fafb !important; border-right: 1px solid var(--border); }
+    [data-testid="stSidebar"] h1,[data-testid="stSidebar"] h2,
+    [data-testid="stSidebar"] h3 { color: var(--brand-dark) !important; }
+
+    /* ── Buttons ── */
+    .stButton > button[kind="primary"] {
+        background: var(--brand) !important; border-color: var(--brand) !important;
+        font-weight: 600 !important; border-radius: 8px !important;
+    }
+    .stButton > button[kind="primary"]:hover {
+        background: var(--brand-dark) !important; border-color: var(--brand-dark) !important;
+    }
+    .stButton > button:not([kind="primary"]) { border-radius: 8px !important; }
+
+    /* ── File uploader ── */
+    [data-testid="stFileUploader"] section {
+        border: 2px dashed var(--border) !important;
+        border-radius: var(--radius) !important;
+        background: var(--surface-alt) !important;
+    }
+    [data-testid="stFileUploader"] section:hover {
+        border-color: var(--brand) !important; background: var(--brand-light) !important;
+    }
+
+    /* ── Spinner override ── */
+    .stSpinner > div { border-top-color: var(--brand) !important; }
+</style>""", unsafe_allow_html=True)
+
 def main():
     # Header
-    st.markdown('<h1 class="main-header">🏥 Shusrusha Medical Document Processor</h1>', unsafe_allow_html=True)
-    st.markdown("Convert discharge summary images into interactive HTML reports with medication analysis")
-    
+    st.markdown("""
+    <div class="app-header">
+        <div>
+            <h1>🏥 Shusrusha</h1>
+            <p>AI-powered discharge summary processor — extract diagnoses, medications &amp; pharmacy links from images</p>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
     # API Key check and prompt (global for main)
-    api_key = os.getenv('OPENAI_API_KEY')
+    _env_key = os.getenv('OPENAI_API_KEY', '').strip()
+    api_key = _env_key if _env_key else None
     with st.sidebar:
-        st.header("⚙️ Configuration")
+        st.markdown("### 🏥 Shusrusha")
+        st.markdown('<div class="section-label">API</div>', unsafe_allow_html=True)
         if api_key:
-            st.success("✅ OpenAI API Key loaded")
+            st.success("✅ API Key ready", icon="🔑")
         else:
-            st.warning("No .env file or API key found.")
             api_key = st.text_input(
-                "🔑 Enter your OpenAI API Key (will NOT be saved)",
+                "OpenAI API Key",
                 type="password",
-                help="Your key is only kept in memory for this session."
+                placeholder="sk-...",
+                help="Kept in memory only — not saved to disk."
             )
             if not api_key:
+                st.info("Enter your OpenAI API key above to get started.")
                 st.stop()
-            st.success("✅ OpenAI API Key accepted (in memory only)")
-        
-        # Model selection
-        st.subheader("🤖 Model Configuration")
+            st.success("✅ API Key accepted")
+
+        st.markdown('<div class="section-label">AI Models</div>', unsafe_allow_html=True)
         ocr_model = st.selectbox(
-            "OCR Model",
+            "OCR (image → text)",
             ["gpt-5.4", "gpt-5.4-mini"],
             index=0,
-            help="Model for image OCR processing"
+            help="Higher model = better accuracy on handwritten/complex documents"
         )
-        
         extraction_model = st.selectbox(
-            "Extraction Model",
+            "Extraction (diagnoses & meds)",
             ["gpt-5.4", "gpt-5.4-mini"],
             index=1,
-            help="Model for text extraction tasks"
+            help="Model used for extracting structured data from OCR text"
         )
-        
         pharmacy_model = st.selectbox(
-            "Pharmacy Matching Model",
+            "Pharmacy matching",
             ["gpt-5.4", "gpt-5.4-mini"],
             index=1,
-            help="Model for medication matching with PharmeEasy"
+            help="Model used to match medications with PharmeEasy products"
         )
-        
-        # Processing options
-        st.subheader("📋 Processing Options")
-        save_files = st.checkbox("Save intermediate files", value=True, help="Save markdown and HTML files")
-        open_files = st.checkbox("Open files in system apps", value=True, help="Automatically open saved files")
-        show_debug = st.checkbox("Show debug information", value=False, help="Display detailed processing logs")
-        
-        # Processing steps configuration
-        st.subheader("🔧 Processing Steps")
-        st.markdown("Choose which steps to run after OCR:")
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            run_diagnoses = st.checkbox("🩺 Extract Diagnoses", value=True, help="Extract medical conditions and diagnoses")
-            run_medications = st.checkbox("💊 Extract Medications", value=True, help="Extract medication names, strengths, instructions and duration")
-        
-        with col2:
-            run_pharmacy = st.checkbox("🔗 PharmeEasy Integration", value=True, help="Match medications with pharmacy links")
-            run_summary = st.checkbox("📋 Generate HTML Summary", value=True, help="Create interactive HTML report")
-        
-        # Dependency warnings
+
+        st.markdown('<div class="section-label">Pipeline Steps</div>', unsafe_allow_html=True)
+        run_diagnoses  = st.checkbox("🩺 Diagnoses",         value=True, help="Extract medical conditions and diagnoses")
+        run_medications = st.checkbox("💊 Medications",       value=True, help="Extract medication names, strengths, instructions and duration")
+        run_pharmacy   = st.checkbox("🔗 PharmeEasy links",  value=True, help="Match medications with pharmacy product links")
+        run_summary    = st.checkbox("📋 HTML report",        value=True, help="Generate the final interactive HTML summary")
+
         if run_pharmacy and not run_medications:
-            st.warning("⚠️ PharmeEasy integration requires medication extraction to be enabled.")
+            st.warning("⚠️ PharmeEasy requires Medications to be enabled.")
+
+        st.markdown('<div class="section-label">Output</div>', unsafe_allow_html=True)
+        save_files = st.checkbox("💾 Save files to disk", value=True, help="Save discharge.md and summary.html")
+        show_debug = st.checkbox("🐛 Debug mode",         value=False, help="Show raw JSON and verbose logs")
+        open_files = False  # opening files on server-side is not useful in web app
         
         if run_summary and not (run_medications or run_diagnoses):
-            st.info("💡 HTML summary will be more comprehensive with diagnoses and medications enabled.")
-    
-    # Main content area
-    col1, col2 = st.columns([2, 1])
-    
-    with col1:
-        # File selection section
-        # Initialize session state for file management
-        if 'selected_files' not in st.session_state:
-            st.session_state.selected_files = []
-        
-        # Ensure selected_files is always a list
-        if not isinstance(st.session_state.selected_files, list):
-            st.session_state.selected_files = []
-        
-        # Use Streamlit uploader but hide file displays with aggressive CSS
-        st.markdown("""
-        <style>
-        /* Hide all file display elements but keep upload functionality */
-        .stFileUploader section[data-testid="stFileUploaderDropzone"] ~ div,
-        .stFileUploader section[data-testid="stFileUploaderDropzone"] + div,
-        .stFileUploader > div > div > section + div,
-        .stFileUploader ul,
-        .stFileUploader li,
-        .stFileUploader > div > div:last-child,
-        .stFileUploader [data-testid*="fileUploadDropzone"] ~ *,
-        .stFileUploader [data-testid*="fileUploadDropzone"] + *,
-        div[data-testid="stFileUploader"] > div > div:nth-child(2),
-        div[data-testid="stFileUploader"] > div > div:nth-child(3),
-        div[data-testid="stFileUploader"] > div > div:nth-child(4),
-        div[data-testid="stFileUploader"] > div > div:nth-child(5),
-        div[data-testid="stFileUploader"] ul,
-        div[data-testid="stFileUploader"] li {
-            display: none !important;
-            visibility: hidden !important;
-            height: 0px !important;
-            max-height: 0px !important;
-            overflow: hidden !important;
-        }
-        
-        /* Keep only the dropzone visible and functional */
-        .stFileUploader {
-            min-height: auto !important;
-        }
-        
-        .stFileUploader section[data-testid="stFileUploaderDropzone"] {
-            border: 2px dashed #ccc !important;
-            border-radius: 6px !important;
-            padding: 20px !important;
-            text-align: center !important;
-            background-color: #fafafa !important;
-        }
-        
-        .stFileUploader section[data-testid="stFileUploaderDropzone"]:hover {
-            border-color: #999 !important;
-            background-color: #f0f0f0 !important;
-        }
-        </style>
-        """, unsafe_allow_html=True)
-        
-        # Initialize session state for file tracking
-        if 'selected_files' not in st.session_state:
-            st.session_state.selected_files = []
-        if 'last_uploader_state' not in st.session_state:
-            st.session_state.last_uploader_state = []
-        
-        uploaded_files = st.file_uploader(
-            "📤 Click to select discharge summary images or drag and drop files here",
-            type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'],
-            accept_multiple_files=True,
-            key="functional_file_uploader",
-            help="Supported formats: PNG, JPG, JPEG, GIF, BMP, TIFF"
+            st.info("💡 HTML summary is richer with diagnoses and medications enabled.")
+
+        st.markdown("---")
+        st.markdown('<p style="font-size:.75rem;color:#94a3b8;text-align:center;">Shusrusha · Powered by OpenAI</p>', unsafe_allow_html=True)
+
+    # ── Main content ────────────────────────────────────────────────────────
+    # Initialize session state
+    if 'selected_files' not in st.session_state:
+        st.session_state.selected_files = []
+    if not isinstance(st.session_state.selected_files, list):
+        st.session_state.selected_files = []
+    if 'last_uploader_state' not in st.session_state:
+        st.session_state.last_uploader_state = []
+
+    # File upload
+    uploaded_files = st.file_uploader(
+        "📂 Upload discharge summary images",
+        type=['png', 'jpg', 'jpeg', 'gif', 'bmp', 'tiff'],
+        accept_multiple_files=True,
+        key="functional_file_uploader",
+        help="Drag & drop or click. Supported: PNG, JPG, JPEG, GIF, BMP, TIFF"
+    )
+
+    # Track state changes — new selection replaces previous
+    current_uploader_files = uploaded_files if uploaded_files else []
+    current_file_names = [f.name for f in current_uploader_files]
+    if current_file_names != st.session_state.last_uploader_state:
+        st.session_state.selected_files = list(current_uploader_files)
+        st.session_state.last_uploader_state = current_file_names
+
+    # File summary row
+    if st.session_state.selected_files:
+        names = sorted(f.name for f in st.session_state.selected_files)
+        count = len(names)
+        st.markdown(
+            f'<div style="background:#f0fdf4;border:1px solid #bbf7d0;border-radius:8px;'
+            f'padding:.5rem .85rem;font-size:.85rem;color:#166534;margin-bottom:.5rem;">'
+            f'<strong>{count} file{"s" if count != 1 else ""} ready:</strong> {", ".join(names)}'
+            f'</div>',
+            unsafe_allow_html=True
         )
-        
-        # Track uploader state changes to detect new selections
-        current_uploader_files = uploaded_files if uploaded_files else []
-        current_file_names = [f.name for f in current_uploader_files]
-        last_file_names = st.session_state.last_uploader_state
-        
-        # If uploader content changed, it's a new selection - REPLACE completely
-        if current_file_names != last_file_names:
-            st.session_state.selected_files = list(current_uploader_files)
-            st.session_state.last_uploader_state = current_file_names
-        
-        # Show just the filenames as a simple string with count
-        if st.session_state.selected_files:
-            sorted_file_names = sorted([f.name for f in st.session_state.selected_files])
-            files_display = " ".join(sorted_file_names)
-            count = len(st.session_state.selected_files)
-            st.markdown(
-                f'<div style="white-space: nowrap; overflow-x: auto; font-family: monospace; font-size: 14px; color: #333; padding: 5px 0;">'
-                f'{count} files: {files_display}'
-                f'</div>',
-                unsafe_allow_html=True
-            )
-        
-        # File validation for selected files
-        uploaded_files = st.session_state.selected_files
-        if uploaded_files:
-            valid_files = []
-            invalid_files = []
-            for file in uploaded_files:
-                if file.size > 0:
-                    valid_files.append(file)
-                else:
-                    invalid_files.append(file.name)
-            
-            if invalid_files:
-                st.warning(f"⚠️ Empty files detected: {', '.join(invalid_files)}")
-            
-            if len(valid_files) != len(uploaded_files):
-                st.info(f"Processing {len(valid_files)} valid files out of {len(uploaded_files)} uploaded.")
-        else:
-            uploaded_files = None
-    
-    with col2:
-        # Clickable Instructions
-        if 'show_instructions' not in st.session_state:
-            st.session_state.show_instructions = False
-        
-        if st.button("📖 How to Use Instructions", use_container_width=True, help="Click to show/hide usage instructions"):
-            st.session_state.show_instructions = not st.session_state.show_instructions
-        
-        # Show instructions modal when toggled
-        if st.session_state.show_instructions:
-            with st.container():
-                st.markdown('<div class="instructions-modal">', unsafe_allow_html=True)
-                st.markdown("### 📖 Instructions")
-                st.markdown("1. **Select Files**: Click 'Select Files' to choose discharge summary images")
-                st.markdown("2. **Configure**: Choose AI models and processing options in the sidebar")
-                st.markdown("3. **Process**: Click 'Start Processing' to begin analysis")
-                st.markdown("4. **Review**: Check the extracted information in the Results section")
-                st.markdown("5. **Download**: Get your interactive HTML report")
-                st.markdown("")
-                st.markdown("**Supported formats**: PNG, JPG, JPEG, GIF, BMP, TIFF")
-                st.markdown("")
-                st.markdown("**Tips:**")
-                st.markdown("- 📸 Ensure images are clear and readable")
-                st.markdown("- 📑 Upload pages in the correct order")
-                st.markdown("- 🔧 Use gpt-5.4 for better accuracy")
-                st.markdown("- 💾 Enable file auto-opening for quick review")
-                st.markdown("- 📊 Click the file count to view selected files")
-                st.markdown("- 🔄 Selecting files again will replace previous selection")
-                st.markdown('</div>', unsafe_allow_html=True)
-    
-    # Processing section
+
+    # File validation
+    uploaded_files = st.session_state.selected_files
     if uploaded_files:
-        st.markdown('<div class="step-header"><h3>🔄 Process Documents</h3></div>', unsafe_allow_html=True)
-        
+        valid_files = [f for f in uploaded_files if f.size > 0]
+        invalid_files = [f.name for f in uploaded_files if f.size == 0]
+        if invalid_files:
+            st.warning(f"⚠️ Skipping empty files: {', '.join(invalid_files)}")
+        if not valid_files:
+            uploaded_files = None
+        else:
+            uploaded_files = valid_files
+    else:
+        uploaded_files = None
+
+    # How-to expander (replaces the old toggle-button modal)
+    with st.expander("📖 How to use"):
+        st.markdown("""
+**Steps:**
+1. Upload one or more discharge summary images above
+2. Optionally adjust AI models and pipeline steps in the sidebar
+3. Click **Start Processing** — results appear below when done
+4. Download the interactive HTML report or individual files
+
+**Tips:**
+- Use **gpt-5.4** for OCR on handwritten or low-quality scans
+- Upload multi-page documents as separate image files, in order
+- Enable **Debug mode** in the sidebar to inspect raw extracted data
+        """)
+
+    # ── Processing section ──────────────────────────────────────────────────
+    if uploaded_files:
+        st.markdown("---")
+
         # Initialize processing state variables
         if 'processing_completed' not in st.session_state:
             st.session_state.processing_completed = False
@@ -404,10 +459,10 @@ def main():
             st.session_state.processing_logs = []
         if 'show_processing_logs' not in st.session_state:
             st.session_state.show_processing_logs = False
-        
+
         # Create a placeholder container for processing output that can be cleared
         processing_container = st.empty()
-        
+
         # Show different buttons based on processing state
         if not st.session_state.processing_completed:
             with processing_container.container():
@@ -416,56 +471,41 @@ def main():
                     st.session_state.processing_logs = []
                     st.session_state.processing_completed = False
                     st.session_state.show_processing_logs = False
-                    
-                    # Create a nested container for all processing output
+
                     with st.container():
-                        process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_model, 
-                                        save_files, open_files, show_debug, 
-                                        run_diagnoses, run_medications, run_pharmacy, run_summary,
-                                        api_key, processing_container)  # Pass the container to clear it later
+                        process_documents(uploaded_files, ocr_model, extraction_model, pharmacy_model,
+                                          save_files, open_files, show_debug,
+                                          run_diagnoses, run_medications, run_pharmacy, run_summary,
+                                          api_key, processing_container)
         else:
-            # Clear the processing container and show completion buttons
             with processing_container.container():
-                # Show processing completed button
-                col_completed, col_reprocess = st.columns([3, 1])
-                with col_completed:
-                    if st.button("✅ Processing Completed (click to view)", type="secondary", use_container_width=True):
+                col_done, col_logs, col_reprocess = st.columns([2, 2, 1])
+                with col_done:
+                    st.success("✅ Processing complete")
+                with col_logs:
+                    if st.button("📋 View logs", use_container_width=True):
                         st.session_state.show_processing_logs = not st.session_state.show_processing_logs
                 with col_reprocess:
-                    if st.button("🔄 Reprocess", type="primary", use_container_width=True):
-                        # Reset state and reprocess
+                    if st.button("🔄 Redo", type="primary", use_container_width=True):
                         st.session_state.processing_completed = False
                         st.session_state.processing_logs = []
                         st.session_state.show_processing_logs = False
                         st.rerun()
-        
-        # Show processing logs modal when requested
+
+        # Processing logs (collapsible)
         if st.session_state.show_processing_logs and st.session_state.processing_logs:
-            with st.container():
-                st.markdown("---")
-                st.markdown("### 📋 Processing Logs")
-                
-                # Create a scrollable container for logs
-                log_container = st.container()
-                with log_container:
-                    for log_entry in st.session_state.processing_logs:
-                        if log_entry['type'] == 'info':
-                            st.info(log_entry['message'])
-                        elif log_entry['type'] == 'success':
-                            st.success(log_entry['message'])
-                        elif log_entry['type'] == 'warning':
-                            st.warning(log_entry['message'])
-                        elif log_entry['type'] == 'error':
-                            st.error(log_entry['message'])
-                        else:
-                            st.write(log_entry['message'])
-                
-                # Close button
-                if st.button("❌ Close Logs", key="close_processing_logs"):
-                    st.session_state.show_processing_logs = False
-                    st.rerun()
-                
-                st.markdown("---")
+            with st.expander("📋 Processing logs", expanded=True):
+                for log_entry in st.session_state.processing_logs:
+                    ts = log_entry.get('timestamp', '')
+                    msg = log_entry['message']
+                    if log_entry['type'] == 'success':
+                        st.markdown(f"`{ts}` ✅ {msg}")
+                    elif log_entry['type'] == 'warning':
+                        st.markdown(f"`{ts}` ⚠️ {msg}")
+                    elif log_entry['type'] == 'error':
+                        st.markdown(f"`{ts}` ❌ {msg}")
+                    else:
+                        st.markdown(f"`{ts}` {msg}")
 
     # Display results progressively as processing steps complete
     if 'processing_results' in st.session_state and st.session_state.processing_results:
@@ -732,289 +772,164 @@ def open_file_in_system(filename):
         return f"Could not find system command to open {filename}"
 
 def display_results():
-    """Display the processing results progressively as steps complete"""
+    """Display processing results in tabs."""
     if 'processing_results' not in st.session_state:
         return
-    
+
     results = st.session_state.processing_results
-    
-    # Only show results header if we have any results
     if not any(results.values()):
         return
-    
-    st.markdown('<div class="step-header"><h3>📊 Results</h3></div>', unsafe_allow_html=True)
-    
-    # Create tabs dynamically based on available results
-    available_tabs = []
-    tab_labels = []
-    
-    # Always show Summary tab if we have any results
-    available_tabs.append("summary")
-    tab_labels.append("📋 Summary")
-    
-    # Show Markdown tab if OCR is complete
-    if 'markdown' in results and results['markdown']:
-        available_tabs.append("markdown")
-        tab_labels.append("📄 Markdown")
-    
-    # Show Diagnoses tab if diagnoses extraction is complete
-    if 'diagnoses' in results and results['diagnoses'] is not None:
-        available_tabs.append("diagnoses")
-        tab_labels.append("🩺 Diagnoses")
-    
-    # Show Medications tab if medications extraction is complete
-    if 'medications' in results and results['medications'] is not None:
-        available_tabs.append("medications")
-        tab_labels.append("💊 Medications")
-    
-    # Show Medication Links tab if PharmeEasy integration is complete
-    if 'fixed_medications' in results and results['fixed_medications'] is not None:
-        available_tabs.append("medication_links")
-        tab_labels.append("🔗 Medication Links")
-    
-    # Create the tabs
-    if len(available_tabs) == 1:
-        # Special case for single tab
-        tab_containers = [st.container()]
-    else:
-        tab_containers = st.tabs(tab_labels)
-    
-    # Display content for each available tab
-    for i, (tab_type, container) in enumerate(zip(available_tabs, tab_containers)):
+
+    st.markdown("---")
+    st.markdown("## 📊 Results")
+
+    # Build tab list dynamically
+    available_tabs, tab_labels = [], []
+    available_tabs.append("summary");        tab_labels.append("📋 Summary")
+    if results.get('markdown'):              available_tabs.append("markdown");      tab_labels.append("📄 OCR Text")
+    if results.get('diagnoses') is not None: available_tabs.append("diagnoses");     tab_labels.append("🩺 Diagnoses")
+    if results.get('medications') is not None: available_tabs.append("medications"); tab_labels.append("💊 Medications")
+    if results.get('fixed_medications') is not None: available_tabs.append("medication_links"); tab_labels.append("🔗 Pharmacy Links")
+
+    tab_containers = st.tabs(tab_labels) if len(available_tabs) > 1 else [st.container()]
+
+    for tab_type, container in zip(available_tabs, tab_containers):
         with container:
+
+            # ── Summary ──────────────────────────────────────────────────
             if tab_type == "summary":
-                st.subheader("Interactive HTML Summary")
-                if 'html_summary' in results and results['html_summary'] is not None:
-                    # Display HTML summary
-                    st.components.v1.html(results['html_summary'], height=600, scrolling=True)
-                    
-                    # Download button
-                    st.download_button(
-                        label="📥 Download HTML Report",
-                        data=results['html_summary'],
-                        file_name="discharge_summary.html",
-                        mime="text/html",
-                        use_container_width=True
-                    )
+                if results.get('html_summary'):
+                    st.components.v1.html(results['html_summary'], height=620, scrolling=True)
+                    st.download_button("📥 Download HTML Report", data=results['html_summary'],
+                                       file_name="discharge_summary.html", mime="text/html",
+                                       use_container_width=True)
                 else:
-                    st.info("⏭️ HTML summary generation was skipped or in progress")
-                    st.markdown("**Available data:**")
-                    
-                    # Show what's available
-                    if 'markdown' in results and results['markdown']:
-                        st.markdown("- ✅ OCR Text (available in Markdown tab)")
-                    if 'diagnoses' in results and results['diagnoses']:
-                        st.markdown("- ✅ Medical Diagnoses")
-                    if 'medications' in results and results['medications']:
-                        st.markdown("- ✅ Extracted Medications")
-                    if 'fixed_medications' in results and results['fixed_medications']:
-                        st.markdown("- ✅ Pharmacy Links")
-                        
+                    st.info("HTML summary was skipped. Enable **HTML report** in the sidebar and reprocess.")
+                    items = []
+                    if results.get('markdown'):        items.append("✅ OCR Text")
+                    if results.get('diagnoses'):       items.append("✅ Diagnoses")
+                    if results.get('medications'):     items.append("✅ Medications")
+                    if results.get('fixed_medications'): items.append("✅ Pharmacy Links")
+                    if items:
+                        st.markdown("Available: " + "  ·  ".join(items))
+
+            # ── OCR Markdown ─────────────────────────────────────────────
             elif tab_type == "markdown":
-                st.subheader("Extracted Text (Markdown)")
                 st.markdown(results['markdown'])
-                
-                st.download_button(
-                    label="📥 Download Markdown",
-                    data=results['markdown'],
-                    file_name="discharge.md",
-                    mime="text/markdown",
-                    use_container_width=True
-                )
-                
+                st.download_button("📥 Download Markdown", data=results['markdown'],
+                                   file_name="discharge.md", mime="text/markdown",
+                                   use_container_width=True)
+
+            # ── Diagnoses ─────────────────────────────────────────────────
             elif tab_type == "diagnoses":
-                st.subheader("Medical Diagnoses")
-                if 'diagnoses' in results and results['diagnoses'] is not None:
-                    diagnoses_data = results['diagnoses']
-                    
-                    # Summary section
-                    diag_count = len(diagnoses_data.get('diagnoses', []))
-                    lab_count = len(diagnoses_data.get('lab_tests', []))
-                    
-                    col_summary1, col_summary2, col_summary3 = st.columns(3)
-                    with col_summary1:
-                        st.metric("🩺 Total Diagnoses", diag_count)
-                    with col_summary2:
-                        st.metric("🧪 Total Lab Tests", lab_count)
-                    with col_summary3:
-                        st.metric("📊 Total Items", diag_count + lab_count)
-                    
-                    st.markdown("---")
-                    
-                    # Create two columns for diagnoses and lab tests
-                    col_diag, col_lab = st.columns(2)
-                    
-                    with col_diag:
-                        st.markdown("#### 🩺 Diagnoses")
-                        if 'diagnoses' in diagnoses_data and diagnoses_data['diagnoses']:
-                            for i, diagnosis in enumerate(diagnoses_data['diagnoses'], 1):
-                                st.markdown(f'<div class="diagnosis-item">{i}. **{diagnosis}**</div>', unsafe_allow_html=True)
-                        else:
-                            st.info("No diagnoses found")
-                    
-                    with col_lab:
-                        st.markdown("#### 🧪 Lab Tests")
-                        if 'lab_tests' in diagnoses_data and diagnoses_data['lab_tests']:
-                            for i, lab_test in enumerate(diagnoses_data['lab_tests'], 1):
-                                st.markdown(f'<div class="lab-test-item">{i}. **{lab_test}**</div>', unsafe_allow_html=True)
-                        else:
-                            st.info("No lab tests found")
-                    
-                    # Show raw JSON data in an expander for debugging
-                    with st.expander("🔍 View Raw Data (Debug)"):
-                        st.json(diagnoses_data)
-                else:
-                    st.info("⏳ Diagnoses extraction in progress...")
-            
+                d = results['diagnoses']
+                diag_list = d.get('diagnoses', [])
+                lab_list  = d.get('lab_tests', [])
+
+                c1, c2, c3 = st.columns(3)
+                c1.metric("🩺 Diagnoses", len(diag_list))
+                c2.metric("🧪 Lab Tests", len(lab_list))
+                c3.metric("📊 Total", len(diag_list) + len(lab_list))
+                st.markdown("---")
+
+                col_d, col_l = st.columns(2)
+                with col_d:
+                    st.markdown("**🩺 Diagnoses**")
+                    if diag_list:
+                        chips = "".join(f'<span class="chip chip-green">{x}</span>' for x in diag_list)
+                        st.markdown(f'<div style="line-height:2">{chips}</div>', unsafe_allow_html=True)
+                    else:
+                        st.caption("None found")
+                with col_l:
+                    st.markdown("**🧪 Lab Tests**")
+                    if lab_list:
+                        chips = "".join(f'<span class="chip chip-blue">{x}</span>' for x in lab_list)
+                        st.markdown(f'<div style="line-height:2">{chips}</div>', unsafe_allow_html=True)
+                    else:
+                        st.caption("None found")
+
+                with st.expander("🔍 Raw JSON"):
+                    st.json(d)
+
+            # ── Medications ───────────────────────────────────────────────
             elif tab_type == "medications":
-                st.subheader("Extracted Medications")
-                if 'medications' in results and results['medications'] is not None:
-                    medications_data = results['medications']
-                    
-                    # Summary metrics
-                    medications_list = medications_data.get('medications', [])
-                    meds_count = len(medications_list)
-                    
-                    col_summary1, col_summary2, col_summary3 = st.columns(3)
-                    with col_summary1:
-                        st.metric("💊 Total Medications", meds_count)
-                    with col_summary2:
-                        with_duration = len([m for m in medications_list if m.get('duration') and m.get('duration').lower() not in ['continue', 'as needed', '']])
-                        st.metric("⏰ With Duration", with_duration)
-                    with col_summary3:
-                        as_needed = len([m for m in medications_list if m.get('duration') and 'as needed' in m.get('duration', '').lower()])
-                        st.metric("🔄 As Needed", as_needed)
-                    
-                    st.markdown("---")
-                    
-                    # Display medications in cards
-                    if medications_list:
-                        for i, med in enumerate(medications_list, 1):
-                            with st.container():
-                                st.markdown(f"""
-                                <div class="medication-card" style="margin-bottom: 0.5rem; padding: 0.5rem; border-left: 3px solid #2E8B57; background-color: #f8f9fa;">
-                                    <div style="margin-bottom: 0.25rem;">
-                                        <strong style="color: #2E8B57; font-size: 1.1em;">💊 {i}. {med.get('name', 'Unknown Medication')}</strong>
-                                    </div>
-                                    <div style="display: flex; flex-wrap: wrap; gap: 1rem; font-size: 0.9em;">
-                                        <span><strong>Form:</strong> {med.get('form', 'Not specified')}</span>
-                                        <span><strong>Strength:</strong> {med.get('strength', 'Not specified')}</span>
-                                        <span><strong>Instructions:</strong> {med.get('instructions', 'No instructions provided')}</span>
-                                        <span><strong>Duration:</strong> {med.get('duration', 'Not specified')}</span>
-                                    </div>
-                                </div>
-                                """, unsafe_allow_html=True)
-                    else:
-                        st.info("No medications found")
-                    
-                    # Show raw JSON data in an expander for debugging
-                    with st.expander("🔍 View Raw Data (Debug)"):
-                        st.json(medications_data)
-                else:
-                    st.info("⏳ Medications extraction in progress...")
-            
+                meds = results['medications'].get('medications', [])
+                with_dur = len([m for m in meds if m.get('duration','').lower() not in ['','continue','as needed']])
+                as_needed = len([m for m in meds if 'as needed' in m.get('duration','').lower()])
+
+                c1, c2, c3 = st.columns(3)
+                c1.metric("💊 Medications", len(meds))
+                c2.metric("⏰ With Duration", with_dur)
+                c3.metric("🔄 As Needed", as_needed)
+                st.markdown("---")
+
+                for i, med in enumerate(meds, 1):
+                    st.markdown(f"""
+                    <div class="med-card med-card-high">
+                        <div class="med-name">💊 {i}. {med.get('name','Unknown')}</div>
+                        <div class="med-meta">
+                            <span><strong>Form</strong> {med.get('form','—')}</span>
+                            <span><strong>Strength</strong> {med.get('strength','—')}</span>
+                            <span><strong>Instructions</strong> {med.get('instructions','—')}</span>
+                            <span><strong>Duration</strong> {med.get('duration','—')}</span>
+                        </div>
+                    </div>""", unsafe_allow_html=True)
+
+                with st.expander("🔍 Raw JSON"):
+                    st.json(results['medications'])
+
+            # ── Pharmacy Links ────────────────────────────────────────────
             elif tab_type == "medication_links":
-                st.subheader("Medications with PharmeEasy Links")
-                if 'fixed_medications' in results and results['fixed_medications'] is not None:
-                    fixed_medications_data = results['fixed_medications']
-                    fixed_meds_list = fixed_medications_data.get('medications', [])
-                    
-                    # Summary metrics
-                    total_meds = len(fixed_meds_list)
-                    high_confidence = len([m for m in fixed_meds_list if m.get('selection_confidence', 0) > 80])
-                    with_links = len([m for m in fixed_meds_list if m.get('pharmaeasy_url')])
-                    no_matches = len([m for m in fixed_meds_list if len(m.get('all_products', [])) == 0])
-                    
-                    col_summary1, col_summary2, col_summary3, col_summary4 = st.columns(4)
-                    with col_summary1:
-                        st.metric("💊 Total Medications", total_meds)
-                    with col_summary2:
-                        st.metric("✅ High Confidence", high_confidence, help="Confidence > 80%")
-                    with col_summary3:
-                        st.metric("🔗 With Links", with_links)
-                    with col_summary4:
-                        st.metric("❌ No Matches", no_matches)
-                    
-                    st.markdown("---")
-                    
-                    # Display medications with enhanced information
-                    if fixed_meds_list:
-                        for i, med in enumerate(fixed_meds_list, 1):
-                            confidence = med.get('selection_confidence', 0)
-                            pharmaeasy_url = med.get('pharmaeasy_url', '')
-                            all_products = med.get('all_products', [])
-                            
-                            # If main pharmaeasy_url is missing but we have products, use the first product's URL
-                            if not pharmaeasy_url and all_products:
-                                pharmaeasy_url = all_products[0].get('url', '')
-                            
-                            # Determine card color based on confidence and availability
-                            if confidence > 80:
-                                card_class = "medication-card-high"
-                            elif confidence > 50:
-                                card_class = "medication-card-medium"
-                            else:
-                                card_class = "medication-card-low"
-                            
-                            with st.container():
-                                # Main medication card
-                                st.markdown(f"""
-                                <div class="{card_class}">
-                                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
-                                        <h4 style="margin: 0; color: #2E8B57;">💊 {i}. {med.get('name', 'Unknown Medication')}</h4>
-                                        <span style="background: {'#28a745' if confidence > 80 else '#ffc107' if confidence > 50 else '#dc3545'}; color: white; padding: 0.25rem 0.5rem; border-radius: 12px; font-size: 0.8rem; font-weight: bold;">
-                                            {confidence:.0f}% confidence
-                                        </span>
-                                    </div>
-                                    <div style="margin-left: 1rem;">
-                                        <p style="margin: 0.25rem 0;"><strong>⚖️ Strength:</strong> {med.get('strength', 'Not specified')}</p>
-                                        <p style="margin: 0.25rem 0;"><strong>📋 Instructions:</strong> {med.get('instructions', 'No instructions provided')}</p>
-                                        <p style="margin: 0.25rem 0;"><strong>⏱️ Duration:</strong> {med.get('duration', 'Not specified')}</p>
-                                """, unsafe_allow_html=True)
-                                
-                                # PharmeEasy link if available
-                                if pharmaeasy_url:
-                                    st.markdown(f'<p style="margin: 0.25rem 0;"><strong>🔗 PharmeEasy:</strong> <a href="{pharmaeasy_url}" target="_blank" style="color: #007bff; text-decoration: none;">View Product</a></p>', unsafe_allow_html=True)
+                fixed = results['fixed_medications']
+                fixed_list = fixed.get('medications', [])
+                hi   = len([m for m in fixed_list if m.get('selection_confidence', 0) > 80])
+                lnks = len([m for m in fixed_list if m.get('pharmaeasy_url')])
+                none = len([m for m in fixed_list if not m.get('all_products')])
+
+                c1, c2, c3, c4 = st.columns(4)
+                c1.metric("💊 Total",         len(fixed_list))
+                c2.metric("✅ High confidence", hi,   help=">80% match confidence")
+                c3.metric("🔗 With links",     lnks)
+                c4.metric("❌ No match",       none)
+                st.markdown("---")
+
+                for i, med in enumerate(fixed_list, 1):
+                    conf = med.get('selection_confidence', 0)
+                    url  = med.get('pharmaeasy_url') or (med.get('all_products') or [{}])[0].get('url', '')
+                    card_cls = "med-card-high" if conf > 80 else "med-card-medium" if conf > 50 else "med-card-low"
+                    badge_cls = "badge-high"   if conf > 80 else "badge-medium"  if conf > 50 else "badge-low"
+                    link_html = f'<a href="{url}" target="_blank" style="color:#1a8754;font-weight:600">View on PharmeEasy ↗</a>' if url else '<span style="color:#dc3545">No link available</span>'
+
+                    st.markdown(f"""
+                    <div class="med-card {card_cls}">
+                        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:.4rem">
+                            <span class="med-name">💊 {i}. {med.get('name','Unknown')}</span>
+                            <span class="badge {badge_cls}">{conf:.0f}% match</span>
+                        </div>
+                        <div class="med-meta">
+                            <span><strong>Strength</strong> {med.get('strength','—')}</span>
+                            <span><strong>Instructions</strong> {med.get('instructions','—')}</span>
+                            <span><strong>Duration</strong> {med.get('duration','—')}</span>
+                        </div>
+                        <div style="margin-top:.5rem;font-size:.85rem">{link_html}</div>
+                    </div>""", unsafe_allow_html=True)
+
+                    all_products = med.get('all_products', [])
+                    if all_products:
+                        with st.expander(f"All {len(all_products)} product option(s)"):
+                            for j, p in enumerate(all_products, 1):
+                                purl = p.get('url', '')
+                                label = f"**{p.get('name','Unknown')}**" + (" ⭐" if j == 1 else "")
+                                if purl:
+                                    st.markdown(f"{j}. {label} — [View]({purl})")
                                 else:
-                                    st.markdown('<p style="margin: 0.25rem 0; color: #dc3545;"><strong>⚠️ PharmeEasy:</strong> No direct link available</p>', unsafe_allow_html=True)
-                                
-                                # Alternative products if available
-                                total_products = len(all_products)
-                                if total_products > 0:
-                                    st.markdown(f'<p style="margin: 0.25rem 0;"><strong>🔄 Available Options:</strong> {total_products} product(s) found</p>', unsafe_allow_html=True)
-                                else:
-                                    st.markdown('<p style="margin: 0.25rem 0; color: #dc3545;"><strong>⚠️ Status:</strong> No matching products found</p>', unsafe_allow_html=True)
-                                
-                                st.markdown('</div></div>', unsafe_allow_html=True)
-                                
-                                # Show all products in expandable section
-                                if total_products > 0:
-                                    with st.expander(f"View all {total_products} available product(s)"):
-                                        for j, product in enumerate(all_products, 1):
-                                            col_prod, col_link = st.columns([3, 1])
-                                            with col_prod:
-                                                product_name = product.get('name', 'Unknown Product')
-                                                # Highlight the selected/main product
-                                                if j == 1:  # Assuming first product is the selected one
-                                                    st.write(f"{j}. **{product_name}** ⭐ *(Selected)*")
-                                                else:
-                                                    st.write(f"{j}. **{product_name}**")
-                                            with col_link:
-                                                product_url = product.get('url', '')
-                                                if product_url:
-                                                    st.markdown(f'<a href="{product_url}" target="_blank" style="color: #007bff;">View</a>', unsafe_allow_html=True)
-                                                else:
-                                                    st.write("No link")
-                    else:
-                        st.info("No medications with pharmacy links found")
-                    
-                    # Show raw JSON data in an expander for debugging
-                    with st.expander("🔍 View Raw Data (Debug)"):
-                        st.json(fixed_medications_data)
-                else:
-                    st.info("⏳ PharmeEasy integration in progress...")
-    
-    # Download all files as ZIP
+                                    st.markdown(f"{j}. {label}")
+
+                with st.expander("🔍 Raw JSON"):
+                    st.json(fixed)
+
+    # Download all as ZIP
+    st.markdown("---")
     if st.button("📦 Download All Files as ZIP", use_container_width=True):
         create_download_zip(results)
 
@@ -1058,30 +973,23 @@ def create_download_zip(results):
     )
 
 def show_about():
-    """Show about information"""
-    st.markdown("### 🏥 About Shusrusha")
-    st.write("**Shusrusha** is an AI-powered medical document processing application that transforms discharge summary images into interactive, searchable HTML reports with medication links and comprehensive analysis.")
-    st.write("")
-    st.write("**Features:**")
-    st.write("- 🔍 **Enhanced OCR**: Advanced text extraction with automatic markdown cleaning")
-    st.write("- 📁 **Smart File Handling**: Auto-open saved files in default applications")
-    st.write("- 🖱️ **Improved File Selection**: Native OS dialogs with multi-format support")
-    st.write("- 🩺 **Medical Analysis**: AI-powered diagnosis and medication extraction")
-    st.write("- 🔗 **Pharmacy Integration**: Direct links to PharmeEasy for medication ordering")
-    st.write("- 🌐 **Cross-Platform**: Works on macOS, Windows, and Linux")
-    st.write("- 💾 **Multiple Export Formats**: HTML, Markdown, JSON, and ZIP downloads")
-    st.write("")
-    st.write("**Technology Stack:**")
-    st.write("- LangGraph for workflow orchestration")
-    st.write("- OpenAI GPT models for AI processing")
-    st.write("- Streamlit for web interface")
-    st.write("- PharmeEasy integration for medication data")
+    """Show about information — kept for compatibility."""
+    pass
 
-# Sidebar navigation
+# Sidebar — static about section (no button needed)
 with st.sidebar:
-    st.markdown("---")
-    if st.button("ℹ️ About", use_container_width=True):
-        show_about()
+    with st.expander("ℹ️ About Shusrusha"):
+        st.markdown("""
+**Shusrusha** converts hospital discharge summary images into interactive HTML reports with:
+
+- 🔍 AI-powered OCR
+- 🩺 Diagnosis extraction
+- 💊 Medication extraction
+- 🔗 PharmeEasy product matching
+- 📋 Downloadable HTML report
+
+**Stack:** LangGraph · OpenAI · Streamlit
+        """)
 
 if __name__ == "__main__":
     main()
