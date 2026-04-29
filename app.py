@@ -213,14 +213,14 @@ def main():
         extraction_model = st.selectbox(
             "Extraction Model",
             ["gpt-5.4", "gpt-5.4-mini"],
-            index=0,
+            index=1,
             help="Model for text extraction tasks"
         )
         
         pharmacy_model = st.selectbox(
             "Pharmacy Matching Model",
             ["gpt-5.4", "gpt-5.4-mini"],
-            index=0,
+            index=1,
             help="Model for medication matching with PharmeEasy"
         )
         
