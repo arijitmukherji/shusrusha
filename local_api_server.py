@@ -98,7 +98,7 @@ def process_document():
         # Extract parameters
         image_data = data.get('image_data')
         options = data.get('options', {})
-        model = data.get('model', 'gpt-5.5')
+        model = data.get('model', 'gpt-5.4')
         
         if not image_data:
             return jsonify({"error": "No image data provided"}), 400

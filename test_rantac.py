@@ -49,7 +49,7 @@ def test_rantac_matching():
         result = process_single_medication(
             medication=test_medication,
             diagnoses_list=test_diagnoses,
-            model="gpt-5.5",
+            model="gpt-5.4",
             medication_index=0,
             api_key=api_key
         )
@@ -111,7 +111,7 @@ def test_detailed_matching():
         
         # Step 2: Parse products
         print("🔍 Step 2: Parsing products from HTML...")
-        products = parse_pharmeasy_products(html_content, "gpt-5.5", api_key=api_key)
+        products = parse_pharmeasy_products(html_content, "gpt-5.4", api_key=api_key)
         
         if products:
             print(f"✅ Found {len(products)} products:")
@@ -124,7 +124,7 @@ def test_detailed_matching():
                 medicine_name="Rantac",
                 products=products,
                 diagnoses=["Gastritis", "Acid Reflux"],
-                model="gpt-5.5",
+                model="gpt-5.4",
                 medication_details={"name": "Rantac", "strength": "150mg", "form": "tablet"},
                 api_key=api_key
             )
