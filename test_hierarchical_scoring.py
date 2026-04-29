@@ -88,7 +88,7 @@ def test_hierarchical_scoring_scenarios():
             result = process_single_medication(
                 medication=test_case['medication'],
                 diagnoses_list=test_case['diagnoses'],
-                model="gpt-4o-mini",
+                model="gpt-5.5",
                 medication_index=i-1,
                 api_key=api_key
             )

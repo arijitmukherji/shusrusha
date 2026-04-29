@@ -73,7 +73,7 @@ def get_openai_params(model: str, messages: list, max_tokens: int = 2048, temper
     
     return base_params
 
-def ocr_node(state: GraphState, model: str = "gpt-4o-mini", api_key: str = None) -> GraphState:
+def ocr_node(state: GraphState, model: str = "gpt-5.5", api_key: str = None) -> GraphState:
     """
     Process images and extract text using GPT-4 Vision.
     """
@@ -138,7 +138,7 @@ def ocr_node(state: GraphState, model: str = "gpt-4o-mini", api_key: str = None)
     state["markdown"] = markdown_text
     return state
 
-def extract_diagnoses_node(state: GraphState, model: str = "gpt-4o-mini", api_key: str = None) -> GraphState:
+def extract_diagnoses_node(state: GraphState, model: str = "gpt-5.5", api_key: str = None) -> GraphState:
     """
     Extract diagnoses and lab tests from the markdown text.
     """
@@ -171,7 +171,7 @@ def extract_diagnoses_node(state: GraphState, model: str = "gpt-4o-mini", api_ke
     state["diagnoses"] = diagnoses_json
     return state
 
-def extract_medications_node(state: GraphState, model: str = "gpt-4o-mini", api_key: str = None) -> GraphState:
+def extract_medications_node(state: GraphState, model: str = "gpt-5.5", api_key: str = None) -> GraphState:
     """
     Extract medications from the markdown text.
     """
@@ -289,7 +289,7 @@ def fetch_pharmeasy_content(medicine_name: str, max_retries: int = 3) -> str:
     print(f"Failed to fetch content for {medicine_name} after {max_retries} attempts")
     return ""
 
-def parse_pharmeasy_products(html_content: str, model: str = "gpt-4o-mini", max_retries: int = 3, api_key: str = None) -> List[Dict[str, str]]:
+def parse_pharmeasy_products(html_content: str, model: str = "gpt-5.5", max_retries: int = 3, api_key: str = None) -> List[Dict[str, str]]:
     """
     Use LLM to parse Pharmeasy HTML and extract product listings with retry logic.
     Also handles JSON data embedded in the page.
@@ -523,7 +523,7 @@ def wrap_medication_items_in_lists(html_content: str) -> str:
     
     return html_content
 
-def add_medication_pills_to_html(html_content: str, fixed_medications: Dict[str, Any], model: str = "gpt-4o-mini") -> str:
+def add_medication_pills_to_html(html_content: str, fixed_medications: Dict[str, Any], model: str = "gpt-5.5") -> str:
     """
     Add visual pills next to medications in the HTML content, converting to list items.
     """
@@ -660,7 +660,7 @@ def add_medication_pills_to_html(html_content: str, fixed_medications: Dict[str,
     
     return html_content
 
-def add_summary_pills_node(state: GraphState, model: str = "gpt-4o-mini", api_key: str = None) -> GraphState:
+def add_summary_pills_node(state: GraphState, model: str = "gpt-5.5", api_key: str = None) -> GraphState:
     """
     Generate enhanced HTML summary with inline medication pills as list items.
     """
@@ -1009,7 +1009,7 @@ def generate_medications_table(fixed_medications: Dict[str, Any]) -> str:
     
     return table_html
 
-def select_best_product_match(medicine_name: str, products: List[Dict[str, str]], diagnoses: List[str], model: str = "gpt-4o-mini", max_retries: int = 3, medication_details: Dict[str, Any] = None, api_key: str = None) -> Dict[str, Any]:
+def select_best_product_match(medicine_name: str, products: List[Dict[str, str]], diagnoses: List[str], model: str = "gpt-5.5", max_retries: int = 3, medication_details: Dict[str, Any] = None, api_key: str = None) -> Dict[str, Any]:
     """
     Use hierarchical scoring to select the best matching product based on:
     1. Exact Name match (ignoring non-alphabetic characters)
@@ -1369,7 +1369,7 @@ def process_single_medication(medication: Dict[str, Any], diagnoses_list: List[s
         })
         return medication_copy
 
-def fix_medications_node(state: GraphState, model: str = "gpt-4o-mini", api_key: str = None) -> GraphState:
+def fix_medications_node(state: GraphState, model: str = "gpt-5.5", api_key: str = None) -> GraphState:
     """
     Fetch Pharmeasy content for each medication and use LLM to select the best matching product.
     Uses parallel processing to significantly reduce processing time.
@@ -1517,7 +1517,7 @@ class AppGraph:
     def __init__(self):
         self.state = {}
     
-    def run_node(self, node_name: str, input_data=None, model: str = "gpt-4o-mini", api_key: str = None):
+    def run_node(self, node_name: str, input_data=None, model: str = "gpt-5.5", api_key: str = None):
         """
         Run a specific node in the graph with the given input data.
         """

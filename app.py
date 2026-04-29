@@ -205,21 +205,21 @@ def main():
         st.subheader("🤖 Model Configuration")
         ocr_model = st.selectbox(
             "OCR Model",
-            ["gpt-4o", "gpt-4o-mini"],
+            ["gpt-5.5", "gpt-5.5-mini"],
             index=0,
             help="Model for image OCR processing"
         )
         
         extraction_model = st.selectbox(
             "Extraction Model",
-            ["gpt-4o-mini", "gpt-4o"],
+            ["gpt-5.5", "gpt-5.5-mini"],
             index=0,
             help="Model for text extraction tasks"
         )
         
         pharmacy_model = st.selectbox(
             "Pharmacy Matching Model",
-            ["gpt-4o", "gpt-4o-mini"],
+            ["gpt-5.5", "gpt-5.5-mini"],
             index=0,
             help="Model for medication matching with PharmeEasy"
         )
@@ -387,7 +387,7 @@ def main():
                 st.markdown("**Tips:**")
                 st.markdown("- 📸 Ensure images are clear and readable")
                 st.markdown("- 📑 Upload pages in the correct order")
-                st.markdown("- 🔧 Use gpt-4o for better accuracy")
+                st.markdown("- 🔧 Use gpt-5.5 for better accuracy")
                 st.markdown("- 💾 Enable file auto-opening for quick review")
                 st.markdown("- 📊 Click the file count to view selected files")
                 st.markdown("- 🔄 Selecting files again will replace previous selection")

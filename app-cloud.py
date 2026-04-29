@@ -244,9 +244,9 @@ def main():
                 # Model selection
                 model_choice = st.selectbox(
                     "🤖 AI Model",
-                    ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
+                    ["gpt-5.5", "gpt-5.5-mini"],
                     index=0,
-                    help="gpt-4o-mini is faster and cheaper, gpt-4o is more accurate"
+                    help="gpt-5.5 for optimal performance, gpt-5.5-mini for cost efficiency"
                 )
                 
                 # Process button
@@ -335,7 +335,7 @@ def main():
         
         1. **Upload** medical discharge summary images (JPG, PNG, PDF)
         2. **Choose** processing options based on your needs
-        3. **Select** AI model (gpt-4o-mini for speed, gpt-4o for accuracy)
+        3. **Select** AI model (gpt-5.5 is now the default for optimal accuracy)
         4. **Click** Process Documents
         5. **Download** results as HTML reports and markdown files
         

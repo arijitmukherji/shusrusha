@@ -69,7 +69,7 @@ def check_api_health():
     result = call_local_api('health', method='GET')
     return result
 
-def process_document(image_data, options, model='gpt-4o-mini'):
+def process_document(image_data, options, model='gpt-5.5'):
     """Process document via local API"""
     data = {
         'image_data': image_data,
@@ -251,9 +251,9 @@ def main():
                 # Model selection
                 model_choice = st.selectbox(
                     "🤖 AI Model",
-                    ["gpt-4o-mini", "gpt-4o", "gpt-4-turbo"],
+                    ["gpt-5.5", "gpt-5.5-mini"],
                     index=0,
-                    help="gpt-4o-mini is faster and cheaper, gpt-4o is more accurate"
+                    help="gpt-5.5 for optimal performance, gpt-5.5-mini for cost efficiency"
                 )
                 
                 # Process button
